@@ -262,4 +262,4 @@ Nothing moves out of free. No billing code is written before a trigger fires.
 | Clipboard behavior varies by browser | Synchronous copy within the click, a textarea fallback, and an owner test in Safari (0.5) |
 | Using email as the owner key: changing the account email orphans that owner's data | Add an alias migration if this ever happens |
 | Owners can claim a relationship that isn't real (provenance is self-reported) | Send It has no sending ability; mail goes from the owner's own account; per-owner contact caps; terms prohibit bought lists |
-| Dev-only `braces` advisory via `eslint-config-next` | Not shipped to production; recheck when `eslint-config-next` updates |
+| Build-time advisories: `braces` via `eslint-config-next` and vinext's tooling, `fflate` via vinext's `@vercel/og` (10 in `npm audit --omit=dev`, October 2026) | None of that code is in the built Worker (checked by searching `dist/`); recheck when vinext or `eslint-config-next` updates |

@@ -146,3 +146,7 @@ Not verified: a real Access token. That needs the deployed site and the AUD tag.
 | `npm run check` | 26 passed, including streak replay: weekends neutral, a skip spent on a missed day, cap at 5, a vacation week covered, the week reset, and badges |
 | `npm run check:workers` | 4 passed; the journey also asserts the demo streak (4) and that a send extends it |
 | Browser (Chromium) | The demo shows a 4-day streak; "I sent it" makes it 5 and unlocks the 5-day badge; the landing page and the app have no horizontal scroll at 390px |
+
+## Dependency audit correction (after adding vinext)
+
+The Phase 0 line "`npm audit --omit=dev` shows 0 vulnerabilities" no longer holds. With vinext 1.2.1, `npm audit --omit=dev` reports 10 advisories (4 moderate, 6 high): `vite-plugin-commonjs` → `vite-plugin-dynamic-import` → `fast-glob` → `micromatch` → `braces`, and `@vercel/og` → `satori` → `fflate`, plus `eslint-config-next`'s `braces`. Searching `dist/` finds none of that code in the built Worker (`unzipSync`, `satori`, `micromatch`, `fast-glob`, `braces`: 0 files each), so they are build-time only. vinext 1.2.1 is the latest release; recheck on updates.
