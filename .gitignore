@@ -12,3 +12,4 @@ imports/
 *.sqlite*
 .DS_Store
 *.log
+.logic-loop/

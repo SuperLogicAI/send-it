@@ -49,13 +49,6 @@ export function openStore(path = ":memory:") {
     enableForeignKeyConstraints: true,
     timeout: 5000,
   });
-  db.function("valid_timestamp", { deterministic: true }, (v) =>
-    isTimestamp(v) ? 1 : 0,
-  );
-  db.function("valid_day", { deterministic: true }, (v) => (isDay(v) ? 1 : 0));
-  db.function("valid_email", { deterministic: true }, (v) =>
-    emailValid(v) ? 1 : 0,
-  );
   db.exec(`
     PRAGMA journal_mode=WAL;
     CREATE TABLE IF NOT EXISTS profile (
@@ -67,30 +60,30 @@ export function openStore(path = ":memory:") {
     INSERT OR IGNORE INTO profile(id) VALUES(1);
     CREATE TABLE IF NOT EXISTS contacts (
       id INTEGER PRIMARY KEY, name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 120),
-      email TEXT NOT NULL UNIQUE CHECK(valid_email(email)=1 AND email=lower(trim(email))),
+      email TEXT NOT NULL UNIQUE CHECK(email LIKE '%_@_%._%' AND email=lower(trim(email))),
       signal_source TEXT NOT NULL CHECK(signal_source IN ('two_way','inbound','event','referral','client','opt_in')),
       signal_evidence TEXT NOT NULL CHECK(length(trim(signal_evidence)) BETWEEN 10 AND 4000),
-      signal_at TEXT NOT NULL CHECK(valid_timestamp(signal_at)=1),
-      last_two_way_at TEXT CHECK(last_two_way_at IS NULL OR valid_timestamp(last_two_way_at)=1),
-      last_inbound_at TEXT CHECK(last_inbound_at IS NULL OR valid_timestamp(last_inbound_at)=1),
-      last_outbound_at TEXT CHECK(last_outbound_at IS NULL OR valid_timestamp(last_outbound_at)=1),
-      quote_sent_at TEXT CHECK(quote_sent_at IS NULL OR valid_timestamp(quote_sent_at)=1),
+      signal_at TEXT NOT NULL CHECK(strftime('%Y-%m-%dT%H:%M:%fZ',signal_at) IS signal_at),
+      last_two_way_at TEXT CHECK(last_two_way_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',last_two_way_at) IS last_two_way_at),
+      last_inbound_at TEXT CHECK(last_inbound_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',last_inbound_at) IS last_inbound_at),
+      last_outbound_at TEXT CHECK(last_outbound_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',last_outbound_at) IS last_outbound_at),
+      quote_sent_at TEXT CHECK(quote_sent_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',quote_sent_at) IS quote_sent_at),
       stage TEXT NOT NULL DEFAULT 'warm' CHECK(stage IN ('warm','talking','quote','client','lost')),
       next_step TEXT CHECK(next_step IS NULL OR length(trim(next_step))>0),
-      next_step_at TEXT CHECK(next_step_at IS NULL OR valid_day(next_step_at)=1),
-      not_now_until TEXT CHECK(not_now_until IS NULL OR valid_day(not_now_until)=1),
+      next_step_at TEXT CHECK(next_step_at IS NULL OR date(next_step_at) IS next_step_at),
+      not_now_until TEXT CHECK(not_now_until IS NULL OR date(not_now_until) IS not_now_until),
       do_not_contact INTEGER NOT NULL DEFAULT 0 CHECK(do_not_contact IN (0,1)),
       CHECK(signal_source!='two_way' OR last_two_way_at IS NOT NULL),
       CHECK((next_step IS NULL)=(next_step_at IS NULL))
     );
-    CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY CHECK(valid_day(day)=1));
+    CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY CHECK(date(day) IS day));
     CREATE TABLE IF NOT EXISTS touches (
       id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id),
       day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL,
       kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','dormant')),
       reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sent','skipped')),
-      sent_at TEXT CHECK(sent_at IS NULL OR valid_timestamp(sent_at)=1),
+      sent_at TEXT CHECK(sent_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',sent_at) IS sent_at),
       next_step_snapshot TEXT, next_step_at_snapshot TEXT,
       outcome TEXT CHECK(outcome IS NULL OR outcome IN ('replied','booked','no_response','not_now')),
       UNIQUE(contact_id,day), UNIQUE(day,position),

@@ -81,6 +81,18 @@ check(
   },
 );
 
+check("plain-SQL CHECKs reject Feb 30 and bad emails, accept valid rows", () => {
+  const db = openStore();
+  const ins = db.prepare(
+    "INSERT INTO contacts(name,email,signal_source,signal_evidence,signal_at,last_two_way_at,next_step,next_step_at) VALUES('Test',?,'two_way','A two-way discovery call.',?,?,'Call',?)",
+  );
+  assert.throws(() => ins.run("nope", ago(9), ago(9), "2026-10-20"));
+  assert.throws(() => ins.run("a@example.test", "2026-02-30T00:00:00.000Z", ago(9), "2026-10-20"));
+  assert.throws(() => ins.run("a@example.test", ago(9), ago(9), "2026-02-30"));
+  ins.run("a@example.test", ago(9), ago(9), "2026-10-20");
+  db.close();
+});
+
 check(
   "input validation rejects impossible dates and normalizes addresses",
   () => {
