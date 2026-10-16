@@ -570,17 +570,6 @@ function Editor({
         <span className="eyebrow">
           {demo ? "SAMPLE DRAFT · MAKE IT YOURS" : "YOUR MESSAGE"}
         </span>
-        <button
-          className="text-button"
-          disabled={busy || !dirty}
-          onClick={() =>
-            void mutate({ action: "draft", ...payload }, "Draft saved.")
-              .then(() => setSaved({ subject, body }))
-              .catch(() => {})
-          }
-        >
-          {dirty ? "Save changes" : "Saved"}
-        </button>
       </div>
       {!demo && !body && (
         <p className="editor-tip">
@@ -636,6 +625,17 @@ function Editor({
           onClick={() => void handoff(true)}
         >
           Copy
+        </button>
+        <button
+          className="secondary"
+          disabled={busy || !dirty}
+          onClick={() =>
+            void mutate({ action: "draft", ...payload }, "Draft saved.")
+              .then(() => setSaved({ subject, body }))
+              .catch(() => {})
+          }
+        >
+          {dirty ? "Save" : "Saved ✓"}
         </button>
         <button
           className="sent-button"
