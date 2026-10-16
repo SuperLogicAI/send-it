@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+.env*
+!.env.example
+data/
+imports/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+.DS_Store
+*.log

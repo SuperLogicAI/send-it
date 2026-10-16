@@ -1,0 +1,4 @@
+name,email,signal_source,signal_evidence,signal_at,last_two_way_at,stage,quote_sent_at,last_outbound_at,next_step,next_step_at
+Alex Rivera (fictional),alex@example.test,two_way,"Discovery call about a simpler booking website; discussed their lost inquiries.",2026-09-24,2026-09-24,quote,2026-09-30,2026-09-30,,
+Jordan Lee (fictional),jordan@example.test,inbound,"Jordan used our contact form to ask about simplifying their studio's appointment bookings.",2026-10-13,,warm,,,,
+Sam Patel (fictional),sam@example.test,client,"We built Sam's studio website; at handoff we discussed reducing repetitive booking questions.",2026-07-01,2026-07-17,client,,,,
