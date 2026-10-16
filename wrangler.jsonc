@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "send-it",
+  "account_id": "72dfdb7692ec6241dc5476af2edf879b",
   "compatibility_date": "2026-10-16",
   "compatibility_flags": [
     "nodejs_compat"
