@@ -62,3 +62,17 @@ The sample CSV contains fictional people and fixed historical dates. Inspect it 
 3. Validate with the owner first, then 3–5 founders over five days using the study in the plan. Measure time to finish, useful sends, edits/skips, and whether the habit survives a busy day.
 
 Gmail/Calendar ingestion, hosted authentication and persistence, billing, multi-customer operation, a live-conversation metric, and VSL remain deferred. Local SQLite and a loopback-only server are not a deployment configuration for Vercel or a shared SaaS.
+
+## Phase 0 progress — October 15, 2026
+
+Node 26.0.0, Next.js 16.4.2. Done: 0.2 (local git; push is the owner's), 0.3, 0.3b, 0.4, 0.6.
+
+| Check | Result |
+| --- | --- |
+| `npm audit --omit=dev` | 0 vulnerabilities (5 dev-only `braces` advisories remain via `eslint-config-next`) |
+| `AGENTS.md` after `next dev` | Hash unchanged (`agentRules: false`) |
+| typecheck, lint, build | Passed |
+| `npm run check` / `--built-route` | 21 / 22 checks passed, including plain-SQL CHECKs (Feb 30, bad email) and `buildPrompt`/`parseReply` |
+| Browser (Chromium, demo workspace) | Draft in Claude opens `claude.ai/new` and copies the prompt; the once-only privacy notice shows; pasting `Subject: …` fills the subject; no horizontal scroll at 390px |
+
+Not verified: Safari and iPhone clipboard/pop-up behavior (step 0.5, owner). Existing `data/*.db` files created before 0.3b still carry the old function-based CHECKs; delete and recreate them (`demo.db` reseeds; `engine.db` is the owner's).

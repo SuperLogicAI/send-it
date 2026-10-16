@@ -461,6 +461,17 @@ main {
   color: #65784f;
   font-size: 11px;
 }
+.draft-helpers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+.draft-helpers .text-button {
+  text-decoration: underline;
+}
 .subject-row {
   display: flex;
   align-items: center;

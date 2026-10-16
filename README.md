@@ -35,7 +35,7 @@ After adding or importing your first people, use **Prepare today's people** if t
 
 ## What's next
 
-**Claude drafting is not connected yet.** The demo contains authored sample messages for fictional contacts; real contacts use a manual editor. The future drafting instructions are in `prompts/draft.md`. Merely adding a key to `.env.local` does not enable generation in this increment.
+**Drafting without an API key.** Each card has **Draft in ChatGPT**, **Draft in Claude**, and **Copy prompt**. They build one prompt from `prompts/draft.md`, your profile, and the person's recorded context, copy it, and open a new chat. Paste the reply into the message box; a leading `Subject:` line fills the subject. Nothing is sent and the card's status doesn't change. Server-side Claude drafting is not connected yet; the demo contains authored sample messages for fictional contacts.
 
 Also deferred: Gmail/Calendar ingestion, actual API sending, hosted auth, billing, multi-customer SaaS, and VSL modules. The original [execution plan](PLAN.md) and [review corrections](plans/claude-plan-v2-review.md) explain the scope. The implementation applies the review's corrected date, queue, suppression, and send-accounting behavior.
 

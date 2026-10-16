@@ -4,6 +4,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import type { Contact } from "../lib/rules.ts";
 import { dateLabel, shiftDay } from "../lib/rules.ts";
+import { buildPrompt, parseReply } from "../lib/prompt.ts";
 import type { Profile, Touch, today } from "../lib/store.ts";
 
 type Data = {
@@ -61,7 +62,13 @@ function values(event: FormEvent<HTMLFormElement>) {
   return Object.fromEntries(new FormData(event.currentTarget));
 }
 
-export default function Dashboard({ initial }: { initial: Data }) {
+export default function Dashboard({
+  initial,
+  instructions,
+}: {
+  initial: Data;
+  instructions: string;
+}) {
   const [data, setData] = useState(initial),
     [tab, setTab] = useState("today"),
     [activeId, setActiveId] = useState<number | null>(null);
@@ -275,6 +282,8 @@ export default function Dashboard({ initial }: { initial: Data }) {
                     mutate={mutate}
                     busy={busy}
                     demo={demo}
+                    profile={state.profile}
+                    instructions={instructions}
                   />
                 ) : (
                   <section className="empty panel">
@@ -446,18 +455,23 @@ function Editor({
   mutate,
   busy,
   demo,
+  profile,
+  instructions,
 }: {
   touch: Touch;
   day: string;
   mutate: Mutate;
   busy: boolean;
   demo: boolean;
+  profile: Profile;
+  instructions: string;
 }) {
   const [subject, setSubject] = useState(touch.subject),
     [body, setBody] = useState(touch.body),
     [snoozing, setSnoozing] = useState(false),
     [until, setUntil] = useState(shiftDay(day, 30)),
-    [localNote, setLocalNote] = useState("");
+    [localNote, setLocalNote] = useState(""),
+    [promptText, setPromptText] = useState("");
   const [saved, setSaved] = useState({
     subject: touch.subject,
     body: touch.body,
@@ -495,6 +509,38 @@ function Editor({
     } catch {
       popup?.close();
     }
+  };
+  // Everything here runs inside the click so Safari allows the copy and the tab.
+  const draftInChat = (target: "chatgpt" | "claude" | "copy") => {
+    const prompt = buildPrompt(instructions, profile, touch);
+    setPromptText("");
+    let seen = false;
+    try {
+      seen = localStorage.getItem("send-it-draft-notice") === "1";
+      localStorage.setItem("send-it-draft-notice", "1");
+    } catch {
+      // storage blocked: the notice just shows every time
+    }
+    if (target !== "copy")
+      window.open(
+        target === "chatgpt" ? "https://chatgpt.com/" : "https://claude.ai/new",
+        "_blank",
+        "noopener",
+      );
+    navigator.clipboard.writeText(prompt).then(
+      () =>
+        setLocalNote(
+          `Prompt copied. Paste it into ${target === "copy" ? "a chat" : "the new chat"} (⌘V / Ctrl+V), then paste the reply into your message below.${
+            seen
+              ? ""
+              : " This shares the person's details with your ChatGPT or Claude account. If this is client information, turn off model training in that app's settings."
+          }`,
+        ),
+      () => {
+        setPromptText(prompt);
+        setLocalNote("Copy this, then paste it into ChatGPT or Claude.");
+      },
+    );
   };
   return (
     <section className="editor panel">
@@ -542,6 +588,18 @@ function Editor({
           next step.
         </p>
       )}
+      <div className="draft-helpers">
+        <span className="muted">Need a draft?</span>
+        <button className="text-button" onClick={() => draftInChat("chatgpt")}>
+          Draft in ChatGPT
+        </button>
+        <button className="text-button" onClick={() => draftInChat("claude")}>
+          Draft in Claude
+        </button>
+        <button className="text-button" onClick={() => draftInChat("copy")}>
+          Copy prompt
+        </button>
+      </div>
       <label className="subject-row">
         <span>Subject</span>
         <input
@@ -557,7 +615,11 @@ function Editor({
         aria-label="Message body"
         value={body}
         maxLength={6000}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => {
+          const reply = parseReply(e.target.value);
+          if (reply.subject) setSubject(reply.subject);
+          setBody(reply.body);
+        }}
         placeholder="Hi…"
       />
       <div className="message-actions">
@@ -593,6 +655,15 @@ function Editor({
       <p className="send-note">
         Gmail opens a draft. You review and press Send there.
       </p>
+      {promptText && (
+        <textarea
+          className="message-body"
+          aria-label="Prompt to copy"
+          readOnly
+          value={promptText}
+          onFocus={(e) => e.currentTarget.select()}
+        />
+      )}
       {localNote && (
         <p className="inline-note" role="status">
           {localNote}
