@@ -131,3 +131,18 @@ Not verified: a deployed preview (no `workers.dev` subdomain; skipped by decisio
 | `check:workers`, typecheck, lint, build | Passed |
 
 Not verified: a real Access token. That needs the deployed site and the AUD tag. Remaining owner input: `ACCESS_AUD`. Also still open: the first deploy (custom domain, Access application hostname).
+
+## Streaks and badges (v1) and the public landing page
+
+| Area | Change |
+| --- | --- |
+| `lib/streak.ts` | Replays confirmed-send days: workday streak, calendar-week count, one skip per 5 sends in a Mon-Sun week (cap 5), skips spent on missed workdays, derived badges. Nothing stored |
+| `lib/store.ts` | `today()` returns `streak` and `badges`; `seedDemoHistory` seeds sample sends for the fictional demo |
+| UI | The momentum card shows the daily streak, the week's progress and the skip bank; a badges panel; "On your computer" is now "Private to you" |
+| Landing | Public page on the bare domain (`sendit.day`); the app moves to `app.sendit.day` |
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | 26 passed, including streak replay: weekends neutral, a skip spent on a missed day, cap at 5, a vacation week covered, the week reset, and badges |
+| `npm run check:workers` | 4 passed; the journey also asserts the demo streak (4) and that a send extends it |
+| Browser (Chromium) | The demo shows a 4-day streak; "I sent it" makes it 5 and unlocks the 5-day badge; the landing page and the app have no horizontal scroll at 390px |

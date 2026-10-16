@@ -11,6 +11,7 @@ import {
   type ContactInput,
   type Kind,
 } from "./rules.ts";
+import { badges, isWorkday, replayStreak } from "./streak.ts";
 
 export type Profile = {
   owner_email: string;
@@ -155,14 +156,22 @@ export function today(db: Store, now = new Date()) {
     .filter((t) => t.status === "queued")
     .slice(0, Math.max(0, target - handled))
     .filter((t) => pickReason(t.contact, now, prefs.timezone));
-  const count = (
+  const sentDays = (
     db.prepare("SELECT sent_at FROM touches WHERE status='sent'").all() as {
       sent_at: string;
     }[]
-  ).filter((t) => {
-    const sentDay = localDay(new Date(t.sent_at), prefs.timezone);
-    return sentDay >= shiftDay(day, -6) && sentDay <= day;
-  }).length;
+  ).map((t) => localDay(new Date(t.sent_at), prefs.timezone));
+  const count = sentDays.filter(
+    (d) => d >= shiftDay(day, -6) && d <= day,
+  ).length;
+  const replies = Number(
+    db
+      .prepare(
+        "SELECT count(*) AS n FROM touches WHERE outcome IN ('replied','booked')",
+      )
+      .get()!.n,
+  );
+  const streak = replayStreak(sentDays, day);
   return {
     profile: prefs,
     day,
@@ -171,6 +180,8 @@ export function today(db: Store, now = new Date()) {
     cards: pending,
     history: all.filter((t) => t.status === "sent"),
     weeklyCount: count,
+    streak,
+    badges: badges(streak, sentDays.length, replies),
     totalContacts: contacts(db).length,
   };
 }
@@ -400,4 +411,27 @@ export function seedDemo(db: Store, now = new Date()) {
         touch.id,
       );
   }
+}
+
+// Sample confirmed sends on the last few workdays, so the fictional demo shows
+// a streak. Runs once per demo workspace; safe to call on every view.
+export function seedDemoHistory(db: Store, now = new Date()) {
+  if (db.prepare("SELECT 1 FROM touches WHERE reason='Sample history'").get())
+    return;
+  const prefs = profile(db);
+  const ids = ["taylor@example.test", "sam@example.test"].map(
+    (email) =>
+      db.prepare("SELECT id FROM contacts WHERE email=?").get(email)?.id,
+  );
+  if (ids.some((id) => id === undefined)) return;
+  let day = localDay(now, prefs.timezone);
+  [2, 2, 1, 1].forEach((sends) => {
+    do day = shiftDay(day, -1);
+    while (!isWorkday(day));
+    db.prepare("INSERT OR IGNORE INTO daily_runs(day) VALUES(?)").run(day);
+    for (let position = 0; position < sends; position++)
+      db.prepare(
+        "INSERT OR IGNORE INTO touches(contact_id,day,position,kind,reason,subject,body,status,sent_at) VALUES(?,?,?,'dormant','Sample history','Checking in','Sample message.','sent',?)",
+      ).run(ids[position], day, position, `${day}T20:00:00.000Z`);
+  });
 }

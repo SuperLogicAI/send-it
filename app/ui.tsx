@@ -140,7 +140,7 @@ export default function Dashboard({
           ))}
         </nav>
         <span className="local-status">
-          <span /> On your computer
+          <span /> Private to you
         </span>
       </header>
 
@@ -349,34 +349,76 @@ export default function Dashboard({
                 <section className="floor panel">
                   <p className="eyebrow">KEEP A LITTLE MOMENTUM</p>
                   <div className="floor-number">
-                    {state.weeklyCount}
-                    <span> / 5</span>
+                    {state.streak.streak}
+                    <span> {state.streak.streak === 1 ? "day" : "days"}</span>
                     <span className="floor-arrow" aria-hidden="true">
                       ↗
                     </span>
                   </div>
-                  <h3>Follow-ups completed</h3>
-                  <p>In the past 7 days · confirmed by you</p>
+                  <h3>Follow-up streak</h3>
+                  <p>
+                    {!state.streak.workdayToday
+                      ? "It's the weekend. Your streak is safe."
+                      : state.streak.todayDone
+                        ? "Today's follow-up is done. Nicely kept."
+                        : state.streak.streak > 0
+                          ? "One follow-up today keeps it going."
+                          : "One follow-up today starts a streak."}
+                  </p>
                   <div
                     className="meter"
                     role="progressbar"
-                    aria-label="Weekly follow-up floor"
-                    aria-valuenow={Math.min(state.weeklyCount, 5)}
+                    aria-label="Follow-ups this week"
+                    aria-valuenow={Math.min(state.streak.weekCount, 5)}
                     aria-valuemin={0}
                     aria-valuemax={5}
                   >
                     {Array.from({ length: 5 }, (_, i) => (
                       <span
                         key={i}
-                        className={i < state.weeklyCount ? "filled" : ""}
+                        className={i < state.streak.weekCount ? "filled" : ""}
                       />
                     ))}
                   </div>
                   <small>
-                    {state.weeklyCount >= 5
-                      ? "Your weekly floor is covered. Keep it thoughtful."
-                      : `${Math.max(0, 5 - state.weeklyCount)} more to reach your weekly minimum.`}
+                    {state.streak.weekCount >= 5
+                      ? "Weekly goal reached. A skip is banked."
+                      : `${5 - state.streak.weekCount} more this week to bank a skip.`}
                   </small>
+                  <div
+                    className="bank"
+                    role="img"
+                    aria-label={`${state.streak.bank} of 5 skips banked`}
+                  >
+                    <span>Skips banked</span>
+                    <span className="pips" aria-hidden="true">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <i key={i} className={i < state.streak.bank ? "on" : ""} />
+                      ))}
+                    </span>
+                  </div>
+                  <small>A skip covers a missed workday on its own.</small>
+                </section>
+                <section className="badges panel">
+                  <h3>Badges</h3>
+                  <ul>
+                    {state.badges.map((b) => (
+                      <li key={b.id} className={b.earned ? "earned" : ""}>
+                        <span className="badge-mark" aria-hidden="true">
+                          {b.earned ? "✓" : ""}
+                        </span>
+                        <span>
+                          {b.label}
+                          <small>
+                            {b.earned ? "Earned" : b.hint}
+                            <span className="sr-only">
+                              {b.earned ? "" : ", not yet earned"}
+                            </span>
+                          </small>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
                 </section>
                 <section className="busy-panel panel">
                   <div className="switch-row">

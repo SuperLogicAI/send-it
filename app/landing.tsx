@@ -111,6 +111,16 @@ export default function Landing() {
           </ul>
         </section>
 
+        <section className="site-open" aria-labelledby="streak">
+          <h2 id="streak">Keep it going</h2>
+          <p>
+            One follow-up on a workday keeps your streak alive. Reach five in a
+            week and you bank a skip, up to five, enough to cover a week away.
+            A sick day or a vacation week won&apos;t reset you. You also earn
+            badges, including one for your first reply.
+          </p>
+        </section>
+
         <section className="site-open" aria-labelledby="open">
           <h2 id="open">See exactly how it picks</h2>
           <p>

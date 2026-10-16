@@ -20,18 +20,29 @@ export async function scenario(call: Call) {
     subject,
     body,
   });
-  assert.equal(handed.state.weeklyCount, 0, "a handoff is not a send");
+  const base = loaded.state.weeklyCount;
+  const { streak } = loaded.state;
+  assert.equal(streak.streak, 4, "the demo shows a sample streak");
+  assert.ok(loaded.state.badges.find((b) => b.id === "first_send")!.earned);
+  assert.equal(handed.state.weeklyCount, base, "a handoff is not a send");
   const compose = new URL(handed.url!);
   assert.equal(compose.hostname, "mail.google.com");
   assert.equal(compose.searchParams.get("su"), subject);
   assert.equal(compose.searchParams.get("body"), body);
   const sent = { action: "sent", id: first.id, subject, body };
-  assert.equal((await call("demo", sent)).state.weeklyCount, 1);
+  assert.equal((await call("demo", sent)).state.weeklyCount, base + 1);
   assert.equal(
     (await call("demo", sent)).state.weeklyCount,
-    1,
+    base + 1,
     "confirming twice counts once",
   );
+  const after = (await call("demo", sent)).state.streak;
+  assert.equal(
+    after.streak,
+    streak.workdayToday ? 5 : 4,
+    "today's send extends the streak on a workday, not on a weekend",
+  );
+  assert.equal(after.todayDone, true);
   const local = await call("local", { action: "workspace", workspace: "local" });
   assert.equal(local.contacts.length, 0);
   const csv =

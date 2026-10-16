@@ -9,6 +9,7 @@ import {
   saveDraft,
   saveProfile,
   seedDemo,
+  seedDemoHistory,
   skip,
   snooze,
   today,
@@ -32,10 +33,15 @@ export type Payload = {
   preview?: { row: number; name: string; error: string | null }[];
 };
 
+function prepareDemo(db: Store, now: Date) {
+  seedDemo(db, now);
+  seedDemoHistory(db, now);
+}
+
 // Runs inside the owner's Durable Object (or a Node test store), so every
 // action is one round trip and one atomic unit of work.
 export function view(db: Store, mode: Workspace, now = new Date()): Payload {
-  if (mode === "demo") seedDemo(db, now);
+  if (mode === "demo") prepareDemo(db, now);
   return { state: today(db, now), contacts: contacts(db), workspace: mode };
 }
 
@@ -45,7 +51,7 @@ export function act(
   input: Record<string, unknown>,
   now = new Date(),
 ): Payload {
-  if (mode === "demo") seedDemo(db, now);
+  if (mode === "demo") prepareDemo(db, now);
   const action = String(input.action ?? "");
   const id = Number(input.id);
   const str = (key: string) =>

@@ -160,6 +160,7 @@ Phase 0 stays on Next.js and `node:sqlite`. Cloudflare starts in Phase 1.
 | 1.6 | **Security baseline:** a CSP and security headers via the `next.config.ts` `headers()` function (vinext reads it); the Workers Rate Limiting binding on the API, per owner; keep the existing request size limits; never log contact data or message bodies; secrets only through `wrangler secret put`. | Headers checked with `curl -I`; a log review finds no personal data |
 | 1.7 | **Account controls:** export (CSV in the import format, plus JSON) and delete everything (`deleteAll()` behind a typed confirmation). Plain-language privacy and terms pages (owner reviews): what's stored, that drafts go to Anthropic, no selling of data, retention, how to delete. | Export, delete, and re-import round trip succeeds |
 | 1.8 | **CI:** GitHub Actions runs typecheck, lint, both check scripts, and build, then deploys `main` with a scoped Cloudflare API token stored as a GitHub secret. | Green run on a test PR |
+| 1.9 | **Streaks and badges (v1, in-app only).** Daily streak on workdays (one confirmed follow-up a day), a weekly goal of 5, one banked skip per weekly goal reached (cap 5, a full work week), skips spent automatically on a missed workday, and four badges (first follow-up, 5-day streak, 4 strong weeks, first reply). Everything is replayed from confirmed-send dates, so nothing is stored. The demo workspace seeds a sample streak. | Replay tests cover weekends, skip spending, the cap, a vacation week and the weekly reset; the demo shows a streak; a send extends it |
 
 **1.3 moving storage into the Durable Object.** All patterns below were verified in the spike.
 
@@ -192,6 +193,8 @@ Phase 0 stays on Next.js and `node:sqlite`. Cloudflare starts in Phase 1.
 - **Owner:** set a monthly spend limit in the Anthropic Console, and choose the model after comparing 20 real drafts from Haiku 5.5 and Sonnet 5.5.
 
 **Gate:** 10–20 invited non-technical owners; ≥40% still active in week 4; zero incidents of one owner seeing another's data; Claude cost per owner measured; top 3 friction points written down.
+
+**Streak rules (1.9).** The daily goal is one confirmed follow-up on a workday, not the full queue of three. The tone stays gentle: no guilt copy when a streak ends. Include outcome-based badges (replies, bookings), not only volume. **Sharing is deferred to Phase 2** and must be a client-generated image with counts only, never contact details and never a public profile URL by default. A future setting may let owners choose their own work week.
 
 ---
 

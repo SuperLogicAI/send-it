@@ -8,6 +8,7 @@ import {
   localDay,
   parseContact,
   rankContacts,
+  shiftDay,
 } from "../lib/rules.ts";
 import {
   addContact,
@@ -30,8 +31,10 @@ import { AuthError, verifyAccess } from "../lib/access.ts";
 import { allowedOrigin, isSiteHost } from "../lib/origin.ts";
 import { scenario } from "./scenario.ts";
 import { buildPrompt, parseReply } from "../lib/prompt.ts";
+import { badges, replayStreak, BANK_CAP } from "../lib/streak.ts";
 
 const now = new Date("2026-10-15T21:00:00.000Z");
+const shiftDayForTest = (day: string, n: number) => shiftDay(day, n);
 const ago = (days: number) =>
   new Date(now.getTime() - days * DAY).toISOString();
 let passed = 0;
@@ -430,6 +433,57 @@ check("parseReply moves a leading Subject line out of the body", () => {
     subject: "",
     body: "Hi Sam, no subject here.",
   });
+});
+
+check("streak: workdays only, weekends neutral, a skip covers a missed day", () => {
+  // 2026-10-12 is a Monday.
+  const mon = "2026-10-12", tue = "2026-10-13", wed = "2026-10-14", thu = "2026-10-15", fri = "2026-10-16", sat = "2026-10-17", sun = "2026-10-18", nextMon = "2026-10-19";
+  assert.deepEqual(replayStreak([], thu).streak, 0);
+  assert.equal(replayStreak([mon, tue, wed], wed).streak, 3);
+  // Today still open: an unfinished today doesn't break the streak.
+  const open = replayStreak([mon, tue, wed], thu);
+  assert.equal(open.streak, 3);
+  assert.equal(open.todayDone, false);
+  // A missed workday with no skip breaks it; the next send starts again.
+  assert.equal(replayStreak([mon, tue, thu], thu).streak, 1);
+  assert.equal(replayStreak([mon, tue, thu], thu).best, 2);
+  // Weekends neither extend nor break the streak.
+  assert.equal(replayStreak([thu, fri], sun).streak, 2);
+  assert.equal(replayStreak([thu, fri, sat], nextMon).streak, 2);
+  assert.equal(replayStreak([thu, fri, sun], nextMon).streak, 2);
+  assert.equal(replayStreak([fri, nextMon], nextMon).streak, 2);
+  assert.equal(replayStreak([fri], nextMon).workdayToday, true);
+  assert.equal(replayStreak([fri], sun).workdayToday, false);
+  // Five sends in a Mon-Sun week bank one skip, and a missed day spends it.
+  const week = [mon, mon, tue, wed, thu]; // 5 sends, Fri missed
+  const banked = replayStreak(week, thu);
+  assert.equal(banked.bank, 1);
+  assert.equal(banked.weekCount, 5);
+  assert.equal(banked.weeksHit, 1);
+  const covered = replayStreak(week, nextMon);
+  assert.equal(covered.bank, 0, "Friday spent the skip");
+  assert.equal(covered.streak, 4, "the streak held through Friday");
+  // The bank caps at a full work week.
+  const many: string[] = [];
+  for (let w = 0; w < 8; w++)
+    for (let i = 0; i < 5; i++) many.push(shiftDayForTest(mon, w * 7 + i));
+  assert.equal(replayStreak(many, shiftDayForTest(mon, 7 * 7 + 4)).bank, BANK_CAP);
+  // A vacation week is covered by a full bank. Mid-week, today is still open.
+  assert.equal(replayStreak(many, shiftDayForTest(mon, 8 * 7 + 4)).bank, 1);
+  const back = replayStreak(many, shiftDayForTest(mon, 9 * 7));
+  assert.equal(back.bank, 0, "five skips covered five missed workdays");
+  assert.equal(back.streak, 40, "the streak held through the whole week");
+  // One more missed workday with an empty bank breaks it.
+  assert.equal(replayStreak(many, shiftDayForTest(mon, 9 * 7 + 1)).streak, 0);
+  // Calendar week count resets on Monday.
+  assert.equal(replayStreak([thu, fri], nextMon).weekCount, 0);
+  // Badges are derived, including best-ever streaks.
+  const got = badges(replayStreak([mon, tue, wed, thu, fri], fri), 5, 1);
+  assert.deepEqual(
+    got.filter((b) => b.earned).map((b) => b.id),
+    ["first_send", "streak_5", "first_reply"],
+  );
+  assert.ok(badges(replayStreak([], thu), 0, 0).every((b) => !b.earned));
 });
 
 check("CSV handles quoted commas, escaped quotes and multiline notes", () => {
