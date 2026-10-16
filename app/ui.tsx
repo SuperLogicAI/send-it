@@ -441,7 +441,16 @@ export default function Dashboard({
           />
         )}
         <footer>
-          <span>SEND IT BY SUPER LOGIC AI</span>
+          <a
+            className="brand-link"
+            href="https://superlogicai.com"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <span>SEND IT BY</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo_b.png" alt="Super Logic AI" width={104} height={14} />
+          </a>
           <span>Good relationships deserve a little attention.</span>
         </footer>
       </main>

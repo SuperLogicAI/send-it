@@ -950,9 +950,25 @@ footer {
   font-size: 10px;
   color: #64715c;
 }
-footer > span:first-child {
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   letter-spacing: 1.4px;
   font-size: 8px;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.brand-link img {
+  display: block;
+  height: 14px;
+  width: auto;
+}
+.brand-link:hover img,
+.brand-link:focus-visible img {
+  opacity: 0.75;
 }
 @media (min-width: 1450px) {
   main {
