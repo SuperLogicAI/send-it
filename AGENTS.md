@@ -1,6 +1,6 @@
-# CLAUDE.md — engine by Super Logic AI
+# CLAUDE.md — Send It by Super Logic AI
 
-> An open-source sales engine for solo founders and lean teams that keeps the pipeline moving while the owner is busy delivering. It does this without a single cold email.
+> An open-source sales tool for solo founders and lean teams that keeps the pipeline moving while the owner is busy delivering. It does this without a single cold email.
 
 ---
 
@@ -119,12 +119,12 @@ Signals in  →  Provenance check  →  Prioritize  →  Draft  →  Owner appro
 
 ## 6. Proposed stack (confirm at session start)
 
-- **App:** Next.js (TypeScript) on Vercel
-- **DB/Auth:** Supabase (Postgres + Google OAuth); SQLite acceptable for a local-only demo
-- **LLM:** Claude API for drafting and prioritization reasoning; prompts live in `/prompts` as plain files (transparency)
-- **Integrations v0:** Gmail API, Google Calendar API, CSV import
+- **App:** Next.js (TypeScript) on Cloudflare Workers via vinext (see `plans/002-send-it-cloudflare.md`); local dev and Phase 0 use plain Next.js
+- **DB/Auth:** one SQLite Durable Object per owner in a separate `send-it-store` Worker; Cloudflare Access for the beta, then Better Auth (Google, D1). Local runs use `node:sqlite`
+- **LLM:** Draft in ChatGPT / Claude (owner's own account) and server-side Claude (capped per owner per day); prompts live in `/prompts` as plain files (transparency)
+- **Integrations v0:** CSV import and manual add. Gmail send/read permissions are not planned; Calendar read comes in Phase 3
 - **Later:** Attio, HubSpot, Outlook/M365, n8n templates for technical users
-- **License:** MIT (default; confirm)
+- **License:** MIT (confirmed)
 
 Secrets live only in env vars. Never commit keys. Never log message bodies or contact data to third-party services beyond the LLM call itself.
 
@@ -153,9 +153,10 @@ Josh will provide full context in a later session. Until then:
 
 ## 9. Open decisions
 
-- [ ] Product name
+- [x] Product name: Send It, at sendit.day (domain purchased)
 - [ ] Daily touchpoint: web UI first, or daily email/SMS digest with approve links first?
 - [ ] How "delivery mode" is detected: manual toggle (v0) vs. calendar load heuristic
 - [ ] Pipeline floor definition: touches/week, open conversations, or booked calls?
-- [ ] License confirmation (MIT default)
+- [x] License: MIT
+- [x] Hosting: Cloudflare Workers (plan 002)
 - [ ] VSL generator scope (pending Josh's context)

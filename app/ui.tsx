@@ -230,7 +230,9 @@ export default function Dashboard({ initial }: { initial: Data }) {
               <span>
                 {state.handled > 0
                   ? `${state.handled} handled today`
-                  : "About 10 minutes"}
+                  : state.cards.length === 1
+                    ? "About 5 minutes"
+                    : "About 10 minutes"}
               </span>
             </div>
             {state.cards.length > 0 && (
@@ -694,7 +696,7 @@ function People({
                   name="email"
                   type="email"
                   required
-                  placeholder="alex@theirbusiness.com"
+                  placeholder="alex@example.com"
                 />
               </Field>
             </div>
@@ -961,7 +963,7 @@ function ProfileForm({
             type="email"
             name="owner_email"
             defaultValue={profile.owner_email}
-            placeholder="you@yourbusiness.com"
+            placeholder="you@example.com"
           />
         </Field>
         <Field label="What do you help people do?">
