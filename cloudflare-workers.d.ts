@@ -1,9 +1,32 @@
-// Spike-only stub so tsc passes; real types come from `wrangler types` in 1.3.
+// Small typed surface for the two Workers APIs we use. Replace with
+// `wrangler types` output only if it stops conflicting with the DOM lib.
 declare module "cloudflare:workers" {
-  export const env: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  export class DurableObject {
-    constructor(ctx: any, env: unknown); // eslint-disable-line @typescript-eslint/no-explicit-any
-    ctx: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  type Mode = import("./lib/actions.ts").Workspace;
+  type Payload = import("./lib/actions.ts").Payload;
+  export type DurableObjectState = {
+    storage: {
+      sql: {
+        exec(
+          query: string,
+          ...bindings: unknown[]
+        ): { toArray(): Record<string, unknown>[] };
+      };
+      transactionSync<T>(fn: () => T): T;
+    };
+    blockConcurrencyWhile(fn: () => Promise<void>): Promise<void>;
+  };
+  export class DurableObject<Env = unknown> {
+    constructor(ctx: DurableObjectState, env: Env);
+    protected ctx: DurableObjectState;
+    protected env: Env;
   }
+  export const env: {
+    OWNER_STORE: {
+      idFromName(name: string): unknown;
+      get(id: unknown): {
+        view(mode: Mode): Promise<Payload>;
+        act(mode: Mode, input: Record<string, unknown>): Promise<Payload>;
+      };
+    };
+  };
 }
-declare type DurableObjectState = any; // eslint-disable-line @typescript-eslint/no-explicit-any

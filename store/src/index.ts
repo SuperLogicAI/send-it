@@ -1,41 +1,43 @@
-import { DurableObject } from "cloudflare:workers";
+import { DurableObject, type DurableObjectState } from "cloudflare:workers";
 import { SCHEMA } from "../../lib/schema.ts";
+import { act, view, type Workspace } from "../../lib/actions.ts";
+import type { Store } from "../../lib/store.ts";
 
-// One instance per owner. Spike methods only; the real RPC surface is step 1.3.
+// Adapts the Durable Object's SQLite to the Store the data functions expect.
+// Each statement runs when exec() is called; toArray() just collects rows.
+function sqlStore(ctx: DurableObjectState): Store {
+  const rows = (q: string, a: unknown[]) =>
+    ctx.storage.sql.exec(q, ...a).toArray();
+  return {
+    prepare: (q) => ({
+      run: (...a) => void rows(q, a),
+      get: (...a) => rows(q, a)[0],
+      all: (...a) => rows(q, a),
+    }),
+    exec: (q) => void ctx.storage.sql.exec(q),
+    transaction: (fn) => ctx.storage.transactionSync(fn),
+  };
+}
+
+// One instance per owner and workspace: no owner_id column to forget.
 export class OwnerStore extends DurableObject {
+  protected db: Store;
   constructor(ctx: DurableObjectState, env: unknown) {
     super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => {
+    this.db = sqlStore(ctx);
+    void ctx.blockConcurrencyWhile(async () => {
       ctx.storage.sql.exec(SCHEMA);
     });
   }
-  add(email: string) {
-    const now = new Date().toISOString();
-    return this.ctx.storage.sql
-      .exec(
-        "INSERT INTO contacts(name,email,signal_source,signal_evidence,signal_at,last_two_way_at) VALUES('Spike Person',?,'two_way','A two-way call about their website.',?,?) RETURNING id",
-        email,
-        now,
-        now,
-      )
-      .toArray()[0];
+  view(mode: Workspace) {
+    return view(this.db, mode);
   }
-  addWithoutProvenance(email: string) {
-    return this.ctx.storage.sql
-      .exec(
-        "INSERT INTO contacts(name,email,signal_source,signal_evidence,signal_at) VALUES('No Signal',?,'scraped','',?) RETURNING id",
-        email,
-        new Date().toISOString(),
-      )
-      .toArray()[0];
-  }
-  count() {
-    return this.ctx.storage.sql
-      .exec("SELECT count(*) AS n FROM contacts")
-      .toArray()[0];
+  act(mode: Workspace, input: Record<string, unknown>) {
+    return act(this.db, mode, input);
   }
 }
 
+// The store has no public HTTP surface; the app reaches it by binding only.
 const handler = {
   fetch() {
     return new Response("not found", { status: 404 });

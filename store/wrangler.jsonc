@@ -1,8 +1,10 @@
 {
   "$schema": "../node_modules/wrangler/config-schema.json",
-  "name": "send-it-store-spike",
+  "name": "send-it-store",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-16",
+  "workers_dev": false,
+  "preview_urls": false,
   "durable_objects": {
     "bindings": [{ "name": "OWNER_STORE", "class_name": "OwnerStore" }]
   },

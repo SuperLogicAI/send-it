@@ -1,0 +1,8 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "send-it-store-test",
+  "main": "worker.ts",
+  "compatibility_date": "2026-10-16",
+  "durable_objects": { "bindings": [{ "name": "STORE", "class_name": "TestStore" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["TestStore"] }]
+}

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,7 +15,6 @@ import {
   confirmSent,
   contacts,
   ensureDay,
-  openStore,
   pendingTouch,
   recordOutcome,
   saveDraft,
@@ -25,7 +23,11 @@ import {
   snooze,
   today,
 } from "../lib/store.ts";
+import { act } from "../lib/actions.ts";
 import { parseCsv } from "../lib/csv.ts";
+import { openStore } from "../lib/node-store.ts";
+import { allowedOrigin } from "../lib/origin.ts";
+import { scenario } from "./scenario.ts";
 import { buildPrompt, parseReply } from "../lib/prompt.ts";
 
 const now = new Date("2026-10-15T21:00:00.000Z");
@@ -440,124 +442,22 @@ check("CSV handles quoted commas, escaped quotes and multiline notes", () => {
   assert.throws(() => parseCsv("name,email\nAlex,test@example.test,extra"));
 });
 
-if (process.argv.includes("--built-route")) {
-  // Match the normal Next server bootstrap without opening a listening port.
-  Object.assign(globalThis, { AsyncLocalStorage });
-  const { NextRequest } = await import("next/server.js");
-  const routeUrl = new URL(
-    "../.next/server/app/api/engine/route.js",
-    import.meta.url,
-  ).href;
-  const built = (await import(routeUrl)) as {
-    default: {
-      routeModule: {
-        userland: { POST: (request: Request) => Promise<Response> };
-      };
-    };
-  };
-  const handler = built.default.routeModule.userland.POST;
-  const oldCwd = process.cwd(),
-    dir = mkdtempSync(join(tmpdir(), "engine-route-check-"));
-  const invoke = async (
-    body: Record<string, unknown>,
-    mode = "demo",
-    origin = "http://127.0.0.1:3000",
-  ) => {
-    const response = await handler(
-      new NextRequest("http://127.0.0.1:3000/api/engine", {
-        method: "POST",
-        headers: {
-          origin,
-          host: "127.0.0.1:3000",
-          "content-type": "application/json",
-          cookie: `engine-workspace=${mode}`,
-        },
-        body: JSON.stringify(body),
-      }),
-    );
-    return { status: response.status, data: await response.json() };
-  };
-  try {
-    process.chdir(dir);
-    assert.equal(
-      (
-        await invoke(
-          { action: "busy", enabled: true },
-          "demo",
-          "https://example.test",
-        )
-      ).status,
-      403,
-    );
-    assert.equal(
-      (await invoke({ action: "busy", enabled: true }, "demo", "malformed"))
-        .status,
-      403,
-    );
-    const loaded = await invoke({ action: "workspace", workspace: "demo" });
-    assert.equal(loaded.status, 200);
-    assert.equal(loaded.data.state.cards.length, 3);
-    const first = loaded.data.state.cards[0];
-    const subject = "A question & next step — café",
-      body = "Hi Jordan,\n\nA note with commas, ampersands & real context.";
-    const handed = await invoke({
-      action: "handoff",
-      id: first.id,
-      subject,
-      body,
-    });
-    assert.equal(handed.status, 200);
-    assert.equal(handed.data.state.weeklyCount, 0);
-    const compose = new URL(handed.data.url);
-    assert.equal(compose.hostname, "mail.google.com");
-    assert.equal(compose.searchParams.get("su"), subject);
-    assert.equal(compose.searchParams.get("body"), body);
-    assert.equal(
-      (await invoke({ action: "sent", id: first.id, subject, body })).data.state
-        .weeklyCount,
-      1,
-    );
-    assert.equal(
-      (await invoke({ action: "sent", id: first.id, subject, body })).data.state
-        .weeklyCount,
-      1,
-    );
-    const local = await invoke({ action: "workspace", workspace: "local" });
-    assert.equal(local.data.contacts.length, 0);
-    const csv =
-      'name,email,signal_source,signal_evidence,signal_at\nFictional Import,import@example.test,inbound,"Asked about a booking site",2026-01-01\nMissing Evidence,bad@example.test,inbound,,2026-01-01\n';
-    const preview = await invoke({ action: "preview", csv }, "local");
-    assert.equal(preview.data.accepted, 1);
-    assert.equal(preview.data.contacts.length, 0);
-    const imported = await invoke({ action: "import", csv }, "local");
-    assert.equal(imported.data.contacts.length, 1);
-    assert.equal(
-      (await invoke({ action: "import", csv }, "local")).data.accepted,
-      0,
-    );
-    assert.equal(
-      (await invoke({ action: "prepare" }, "local")).data.state.cards.length,
-      1,
-    );
-    passed++;
-    console.log(
-      "✓ compiled Next route: origin checks, SQLite, Gmail encoding, confirmation, separate workspaces and CSV import",
-    );
-  } finally {
-    const shared = globalThis as typeof globalThis & {
-      engineStores?: Map<string, ReturnType<typeof openStore>>;
-    };
-    for (const [path, db] of shared.engineStores ?? []) {
-      if (path.startsWith(dir)) {
-        db.close();
-        shared.engineStores!.delete(path);
-      }
-    }
-    process.chdir(oldCwd);
-    rmSync(dir, { recursive: true, force: true });
-  }
+check("origin guard allows only same-host localhost origins", () => {
+  assert.ok(allowedOrigin("http://localhost:3000", "localhost:3000"));
+  assert.ok(allowedOrigin("http://127.0.0.1:3000", "127.0.0.1:3000"));
+  assert.ok(!allowedOrigin("https://example.test", "localhost:3000"));
+  assert.ok(!allowedOrigin("http://localhost:3001", "localhost:3000"));
+  assert.ok(!allowedOrigin("malformed", "localhost:3000"));
+  assert.ok(!allowedOrigin(null, "localhost:3000"));
+});
+
+{
+  const stores = { demo: openStore(), local: openStore() };
+  await scenario(async (mode, input) => act(stores[mode], mode, input));
+  passed++;
+  console.log(
+    "✓ owner journey on Node SQLite: Gmail encoding, confirmation, separate workspaces, CSV import",
+  );
 }
 
-console.log(
-  `\n${passed} checks passed. No real contacts or email services were used.`,
-);
+console.log(`\n${passed} checks passed. No real contacts or email services were used.`);

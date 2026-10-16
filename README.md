@@ -10,10 +10,11 @@ Requires Node 24 or newer (developed and checked with Node 26).
 
 ```sh
 npm ci
-npm run dev
+npm run dev:store   # terminal 1: the data store (a local Cloudflare Worker)
+npm run dev         # terminal 2: the app
 ```
 
-Open **http://127.0.0.1:3000**. The app listens only on this computer. This is a local, single-owner prototype; it has no login and is not ready for public hosting.
+Open **http://localhost:3000**. Both run only on this computer. This is a local, single-owner build with a fixed development owner; sign-in arrives in plan step 1.4, and a production build refuses to run until then.
 
 The first screen is a labeled fictional demo. Choose **Use my own contacts** to open a separate, initially empty workspace. No email account connection is needed.
 
@@ -29,7 +30,7 @@ Developer setup belongs here, not in the owner's daily workflow. Once running, t
 - **I sent it** records an owner-confirmed send once. Opening Gmail or copying does not count. Send It has no mail-sending API or background sender.
 - Busy-week mode, a trailing seven-local-day floor of five confirmed follow-ups, snooze dates, and do-not-contact.
 - Reply/booking/no-response recording with a next step and date. Booking alone never creates a two-way-exchange record.
-- Separate fictional and personal databases in `data/demo.db` and `data/engine.db`.
+- Separate fictional and personal workspaces, each its own Durable Object database.
 
 After adding or importing your first people, use **Prepare today's people** if the daily list is empty. Once a nonempty selection is saved, additional imports can appear the next day. Switching mode does not undo completed work or discard reserved cards.
 
@@ -68,19 +69,15 @@ npm run check
 npm run typecheck
 npm run lint
 npm run build
-node scripts/check.ts --built-route
+npm run check:workers
 ```
 
-One assert script tests the actual rules and disposable SQLite databases. Its optional `--built-route` mode exercises the compiled Next route in-process after building, without opening a port or contacting Gmail. It checks origin restrictions, CSV preview/import, workspace separation, Gmail URL encoding, and idempotent confirmation. Tests never use real contacts or send email.
-
-Typecheck, lint, production build, and the checks are recorded in [BUILD.md](BUILD.md). A browser walkthrough is still needed: the implementation environment denied listening on a local port. The production build establishes that Next can bundle the SQLite code; it does not substitute for visual/browser verification.
+`npm run check` tests the rules and the whole owner journey on disposable in-memory SQLite. `npm run check:workers` runs the real per-owner Durable Object in local workerd: the same journey, owner isolation, database CHECKs and foreign keys, and transaction rollback. Tests never use real contacts or send email. Results are recorded in [BUILD.md](BUILD.md).
 
 ## Local data and development
 
-Database files, their WAL/SHM sidecars, local imports, secrets, and build output are ignored. Sample fixtures use `example.test` addresses. No analytics, remote fonts, or third-party logging are included. The existing research documents and product charter are preserved.
+Each owner's data lives in its own SQLite Durable Object (`store/`); locally it is kept under `.wrangler/state`, which is ignored along with secrets and build output. Sample fixtures use `example.test` addresses. No analytics, remote fonts, or third-party logging are included. The existing research documents and product charter are preserved.
 
 Dependencies were installed from an isolated copy of the existing npm cache because network access was unavailable. `package-lock.json` pins that working set. The scoped `ignore` override selects a cached compatible v7 release for development tooling. Review and update dependencies before any hosted release.
-
-SQLite-to-Postgres migration will require translating persistence, types/defaults, IDs, and access controls. Local operation alone is not a hosted security model.
 
 MIT licensed. See [LICENSE](LICENSE).

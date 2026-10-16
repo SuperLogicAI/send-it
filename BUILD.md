@@ -89,3 +89,27 @@ Not verified: Safari and iPhone clipboard/pop-up behavior (step 0.5, owner). Exi
 | Deployed preview | **Not done.** The Cloudflare account has no `workers.dev` subdomain, and Wrangler couldn't register one |
 
 Side effects: `vinext init` raised React to 19.3.1 (needed by `react-server-dom-webpack`); `vite dev`/`next build` both rewrite `next-env.d.ts`, so expect churn until Next is removed; ESLint now ignores `dist/`, `.vinext/`, `.wrangler/`.
+
+## Phase 1.3 — storage in a per-owner Durable Object (branch `phase1/cloudflare`)
+
+| Area | Change |
+| --- | --- |
+| `lib/store.ts` | No Node imports. `Store` is a small interface; `transaction()` uses `db.transaction` when present, else `BEGIN IMMEDIATE`; `addContact` uses `RETURNING id` |
+| `lib/node-store.ts` | Node-only `openStore`, used by `npm run check` |
+| `lib/schema.ts` | One schema string shared by Node and the Durable Object |
+| `lib/actions.ts` | The route's action switch, moved so it runs inside the Durable Object: one RPC per request |
+| `store/` | `send-it-store` Worker, `OwnerStore` class (`view`, `act`), no public HTTP surface |
+| Storage keys | `owner:<email>` and `demo:<email>`; the `engine-workspace` cookie only picks between them. The owner is a fixed development value and production builds refuse to run until step 1.4 |
+
+| Check | Result |
+| --- | --- |
+| typecheck, lint, build (`vite build`) | Passed |
+| `npm run check` | 23 passed, including the owner journey on in-memory SQLite |
+| `npm run check:workers` | 4 passed in local workerd: owner journey, owner isolation, CHECKs and foreign keys, transaction rollback |
+| Browser (Chromium, `vite dev` + `wrangler dev` store) | 1.2 gate met locally: the demo renders on Workers from the Durable Object. Three cards with reasons; edits survive reload; Copy leaves the floor at 0; "I sent it" gives "1 handled today"; own-contacts workspace opens; no horizontal scroll at 390px |
+
+Found and fixed: Durable Object RPC results carry `Symbol.dispose`, which React refuses to pass to client components; `page.tsx` copies the payload to plain JSON.
+
+Gotchas: wrangler's default dev port 8787 can be held by another process and `unstable_startWorker` then hangs silently, so the Workers check picks free ports. The Next toolchain no longer builds this app (`next build` fails on `cloudflare:workers`). Local runs now need two terminals (`dev:store`, `dev`). Not merged into `main` so the 10-day trial testers keep the single-command Node version.
+
+Not verified: a deployed preview (no `workers.dev` subdomain; skipped by decision), Safari/iPhone (0.5).

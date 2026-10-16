@@ -1,7 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { SCHEMA } from "./schema.ts";
-import { dirname } from "node:path";
 import {
   emailValid,
   isDay,
@@ -44,20 +40,19 @@ export type Touch = {
   contact: Contact;
 };
 
-export function openStore(path = ":memory:") {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path, {
-    enableForeignKeyConstraints: true,
-    timeout: 5000,
-  });
-  db.exec(`
-    PRAGMA journal_mode=WAL;
-    ${SCHEMA}
-  `);
-  return db;
-}
-
-export type Store = ReturnType<typeof openStore>;
+// What the data functions need from SQLite. node:sqlite (tests) and the
+// Durable Object (production) both satisfy it; `transaction` is optional
+// because node:sqlite has none and uses BEGIN IMMEDIATE instead.
+type Row = Record<string, unknown>;
+export type Store = {
+  prepare(q: string): {
+    run(...a: unknown[]): unknown;
+    get(...a: unknown[]): Row | undefined;
+    all(...a: unknown[]): Row[];
+  };
+  exec(q: string): unknown;
+  transaction?<T>(fn: () => T): T;
+};
 export function profile(db: Store): Profile {
   // node:sqlite returns null-prototype rows. Copy them into plain objects
   // before they reach React's Server Component serialization boundary.
@@ -93,13 +88,14 @@ export function addContact(db: Store, input: ContactInput): number {
     throw new Error("Invalid contact fields.");
   const row = db
     .prepare(
-      `INSERT INTO contacts(${keys.join(",")}) VALUES(${keys.map(() => "?").join(",")})`,
+      `INSERT INTO contacts(${keys.join(",")}) VALUES(${keys.map(() => "?").join(",")}) RETURNING id`,
     )
-    .run(...keys.map((k) => input[k]));
-  return Number(row.lastInsertRowid);
+    .get(...keys.map((k) => input[k]));
+  return Number(row!.id);
 }
 
-function transaction<T>(db: Store, fn: () => T): T {
+export function transaction<T>(db: Store, fn: () => T): T {
+  if (db.transaction) return db.transaction(fn);
   db.exec("BEGIN IMMEDIATE");
   try {
     const value = fn();

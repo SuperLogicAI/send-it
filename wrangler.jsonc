@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "send-it-spike",
+  "name": "send-it",
   "compatibility_date": "2026-10-16",
   "compatibility_flags": [
     "nodejs_compat"
@@ -22,8 +22,10 @@
       {
         "name": "OWNER_STORE",
         "class_name": "OwnerStore",
-        "script_name": "send-it-store-spike"
+        "script_name": "send-it-store"
       }
     ]
-  }
+  },
+  "workers_dev": false,
+  "preview_urls": false
 }
