@@ -33,6 +33,7 @@
 | Name and domain | **Send It** at **sendit.day**. Cloudflare Registrar lists `.day` (Google Registry); confirm at checkout. |
 | Repository | Stays **public and MIT**. The hosted sendit.day site is the official copy of the same code. |
 | Business model | A free tool for building credibility. Freemium only if users ask for more (Phase 4). No billing work in this plan. |
+| Cloudflare account | **contact@superlogicai.com** (holds sendit.day and lookwhaticando.dev). Wrangler must be logged in as that user; put its `account_id` in `wrangler.jsonc`. Start on the Workers Free plan (see Running costs). |
 | Hosting | Cloudflare Workers. The web app runs on **vinext**, Cloudflare's recommended path for Next.js; `vinext check` scored this app 100% compatible. |
 | Data | **One SQLite Durable Object per owner**, inside its own **`send-it-store` Worker** and bound to the app with `script_name`. Sign-in tables (Phase 2) live in D1. |
 | Drafting | **Draft in ChatGPT / Claude** (free, uses the owner's own account) and server-side Claude (capped per owner per day). Both use one prompt builder. |
@@ -62,7 +63,7 @@ Run before handoff, in a scratch copy of the repo, using fictional data only.
 | Browser walkthrough (Chromium, Next 16.4.2 copy) | `BUILD.md` steps 1–6 pass: three cards with reasons, edits survive reload, Copy works, the Gmail compose URL is correctly encoded, the floor doesn't count handoffs, "I sent it" counts once and survives reload, Busy week stops at "You've done your part today," the personal workspace starts empty with its own floor, Prepare today's people works. Recording an outcome also works. At 390px wide there is no horizontal scroll. | Re-run quickly on the real repo after 0.3 |
 | Walkthrough findings | `favicon.ico` 404. Copy was tested only in Chromium with clipboard permission; Safari's gesture rules are untested. "About 10 minutes" shows even for one person. | Fixes in 0.4 and 0.6 |
 | `chatgpt.com/?q=` and `claude.ai/new?q=` | Undocumented. One report says the Claude parameter stopped working; third-party guidance keeps URLs under ~2,000 characters; links may auto-submit. | **Not used.** The button copies the prompt and opens a new chat (0.6) |
-| Cloudflare limits | Workers Free: 10 ms CPU per request, 100k requests a day (official docs). Zero Trust free for 50 users (third-party sources only). | $5/month Workers Paid from Phase 1 |
+| Cloudflare limits | Workers Free: 10 ms CPU per request, 100k requests a day (official docs). Zero Trust free for 50 users (third-party sources only). Whether server-rendered React fits in 10 ms is **unmeasured**; the bundle is about 325 KiB gzipped, under the 3 MB free limit. | Start on Workers Free. Upgrade to Paid ($5/month) when "Error 1102: exceeded resource limits" appears in the logs, or before inviting non-technical beta owners, whichever comes first |
 
 ## Pillar check
 
@@ -90,8 +91,8 @@ Rejected and never built: Gmail send API, auto-send, bought or scraped lists, de
 | Item | Cost |
 | --- | --- |
 | Domain | Cloudflare Registrar charges cost price, with no markup |
-| Workers Paid | $5/month from Phase 1. The free plan's 10 ms CPU limit per request is too tight for server-rendered React |
-| Durable Objects | Included in Paid: 1M requests and 50M rows written per month |
+| Workers Paid | $0 until needed. Upgrade to $5/month when 1102 (CPU limit) errors appear, or before non-technical beta owners are invited. The free plan's 10 ms CPU limit per request may be too tight for server-rendered React; this is unmeasured |
+| Durable Objects | SQLite-backed objects work on Free (100k rows written a day, 5 GB total). Paid includes 1M requests and 50M rows written per month |
 | Cloudflare Access (beta gate) | Free for up to 50 users |
 | Turnstile, Email Routing, Web Analytics | Free |
 | Claude drafts (3 per owner per day) | About $0.04 per owner per month on Haiku 5.5, about $0.72 on Sonnet 5.5. Hard-capped per owner per day |
