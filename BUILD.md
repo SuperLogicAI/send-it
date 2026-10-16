@@ -76,3 +76,16 @@ Node 26.0.0, Next.js 16.4.2. Done: 0.2 (local git; push is the owner's), 0.3, 0.
 | Browser (Chromium, demo workspace) | Draft in Claude opens `claude.ai/new` and copies the prompt; the once-only privacy notice shows; pasting `Subject: …` fills the subject; no horizontal scroll at 390px |
 
 Not verified: Safari and iPhone clipboard/pop-up behavior (step 0.5, owner). Existing `data/*.db` files created before 0.3b still carry the old function-based CHECKs; delete and recreate them (`demo.db` reseeds; `engine.db` is the owner's).
+
+## Phase 1.2 spike — vinext + store Worker (branch `spike/vinext-wrangler`)
+
+| Check | Result |
+| --- | --- |
+| `vinext init --platform cloudflare` | Default now sets up the **beta `cf` CLI** (`cloudflare.config.ts`), not Wrangler. Used `--legacy-wrangler-cloudflare-init` to match the plan (`wrangler.jsonc`, `script_name` bindings). The `cf` attempt is kept as a WIP commit on `spike/vinext`. |
+| `vite build` (vinext) | Passes. Worker is ~1 MiB (325 KiB gzip) |
+| Local, app Worker → store Worker (`wrangler dev` store + `vite dev` app, `script_name` binding) | Works. Owner A: 0 → add → 1 row; owner B sees 0. `INSERT … RETURNING id` works. A row with no provenance is rejected by the CHECK. The real `lib/schema.ts` runs in one `sql.exec` |
+| `/` (the demo page) on workerd | **500 "operation not permitted"**: `node:sqlite` and `mkdirSync` can't run in workerd. Expected; fixed by step 1.3 |
+| `wrangler deploy --dry-run` (store and app) | Both bundle; bindings resolve |
+| Deployed preview | **Not done.** The Cloudflare account has no `workers.dev` subdomain, and Wrangler couldn't register one |
+
+Side effects: `vinext init` raised React to 19.3.1 (needed by `react-server-dom-webpack`); `vite dev`/`next build` both rewrite `next-env.d.ts`, so expect churn until Next is removed; ESLint now ignores `dist/`, `.vinext/`, `.wrangler/`.

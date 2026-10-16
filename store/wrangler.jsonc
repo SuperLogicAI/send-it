@@ -1,0 +1,10 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "send-it-store-spike",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-16",
+  "durable_objects": {
+    "bindings": [{ "name": "OWNER_STORE", "class_name": "OwnerStore" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["OwnerStore"] }]
+}
