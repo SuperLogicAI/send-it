@@ -80,4 +80,4 @@ Each owner's data lives in its own SQLite Durable Object (`store/`); locally it 
 
 Dependencies were installed from an isolated copy of the existing npm cache because network access was unavailable. `package-lock.json` pins that working set. The scoped `ignore` override selects a cached compatible v7 release for development tooling. Review and update dependencies before any hosted release.
 
-MIT licensed. See [LICENSE](LICENSE).
+MIT licensed. See [LICENSE](LICENSE). The Super Logic AI name and logo are not covered by the MIT license.
