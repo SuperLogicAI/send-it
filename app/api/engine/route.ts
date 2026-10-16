@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     )
   ) {
     return NextResponse.json(
-      { error: "Open Send It at sendit.day to make changes." },
+      { error: "Open Send It at app.sendit.day to make changes." },
       { status: 403 },
     );
   }

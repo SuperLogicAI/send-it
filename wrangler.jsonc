@@ -37,6 +37,10 @@
     {
       "pattern": "sendit.day",
       "custom_domain": true
+    },
+    {
+      "pattern": "app.sendit.day",
+      "custom_domain": true
     }
   ]
 }

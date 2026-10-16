@@ -27,7 +27,7 @@ import { act } from "../lib/actions.ts";
 import { parseCsv } from "../lib/csv.ts";
 import { openStore } from "../lib/node-store.ts";
 import { AuthError, verifyAccess } from "../lib/access.ts";
-import { allowedOrigin } from "../lib/origin.ts";
+import { allowedOrigin, isSiteHost } from "../lib/origin.ts";
 import { scenario } from "./scenario.ts";
 import { buildPrompt, parseReply } from "../lib/prompt.ts";
 
@@ -443,18 +443,28 @@ check("CSV handles quoted commas, escaped quotes and multiline notes", () => {
   assert.throws(() => parseCsv("name,email\nAlex,test@example.test,extra"));
 });
 
-check("origin guard: production accepts only the site, development also localhost", () => {
-  assert.ok(allowedOrigin("https://sendit.day", "sendit.day"));
-  assert.ok(allowedOrigin("https://sendit.day", "anything", true));
+check("origin guard: production accepts only the app origin, development also localhost", () => {
+  assert.ok(allowedOrigin("https://app.sendit.day", "app.sendit.day"));
+  assert.ok(allowedOrigin("https://app.sendit.day", "anything", true));
+  assert.ok(!allowedOrigin("https://sendit.day", "sendit.day"), "landing host can't post");
   assert.ok(!allowedOrigin("http://localhost:3000", "localhost:3000"));
-  assert.ok(!allowedOrigin("https://sendit.day.evil.test", "sendit.day"));
-  assert.ok(!allowedOrigin("https://sendit.dev", "sendit.day"));
-  assert.ok(!allowedOrigin(null, "sendit.day"));
+  assert.ok(!allowedOrigin("https://app.sendit.day.evil.test", "app.sendit.day"));
+  assert.ok(!allowedOrigin("https://app.sendit.dev", "app.sendit.day"));
+  assert.ok(!allowedOrigin(null, "app.sendit.day"));
   assert.ok(allowedOrigin("http://localhost:3000", "localhost:3000", true));
   assert.ok(allowedOrigin("http://127.0.0.1:3000", "127.0.0.1:3000", true));
   assert.ok(!allowedOrigin("https://example.test", "localhost:3000", true));
   assert.ok(!allowedOrigin("http://localhost:3001", "localhost:3000", true));
   assert.ok(!allowedOrigin("malformed", "localhost:3000", true));
+});
+
+check("only the bare domain serves the public landing page", () => {
+  assert.ok(isSiteHost("sendit.day"));
+  assert.ok(isSiteHost("www.sendit.day"));
+  assert.ok(!isSiteHost("app.sendit.day"));
+  assert.ok(!isSiteHost("sendit.day.evil.test"));
+  assert.ok(!isSiteHost("localhost:3000"));
+  assert.ok(!isSiteHost(null));
 });
 
 {
