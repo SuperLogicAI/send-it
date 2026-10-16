@@ -13,3 +13,4 @@ imports/
 .DS_Store
 *.log
 .logic-loop/
+.playwright-cli/
