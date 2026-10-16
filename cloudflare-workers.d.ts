@@ -21,6 +21,8 @@ declare module "cloudflare:workers" {
     protected env: Env;
   }
   export const env: {
+    ACCESS_TEAM: string;
+    ACCESS_AUD: string;
     OWNER_STORE: {
       idFromName(name: string): unknown;
       get(id: unknown): {

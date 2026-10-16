@@ -113,3 +113,21 @@ Found and fixed: Durable Object RPC results carry `Symbol.dispose`, which React 
 Gotchas: wrangler's default dev port 8787 can be held by another process and `unstable_startWorker` then hangs silently, so the Workers check picks free ports. The Next toolchain no longer builds this app (`next build` fails on `cloudflare:workers`). Local runs now need two terminals (`dev:store`, `dev`). Not merged into `main` so the 10-day trial testers keep the single-command Node version.
 
 Not verified: a deployed preview (no `workers.dev` subdomain; skipped by decision), Safari/iPhone (0.5).
+
+## Phase 1.4 — Cloudflare Access sign-in (code; not yet deployed)
+
+| Area | Change |
+| --- | --- |
+| `lib/access.ts` | Verifies the `Cf-Access-Jwt-Assertion` RS256 JWT with Web Crypto: signature against the team's JWKS, issuer, audience, `exp`, `nbf`, and an `email` claim. Fails closed when the team or AUD is not configured |
+| `lib/owner.ts` | Owner key = verified, lowercased email. Only `NODE_ENV === "development"` skips sign-in; an unset `NODE_ENV` behaves like production |
+| `lib/origin.ts` | Production accepts only `Origin: https://sendit.day`; a development build also accepts same-host localhost |
+| `wrangler.jsonc` | `ACCESS_TEAM=broad-wave-65e1`, `ACCESS_AUD` still empty, custom domain `sendit.day`, `workers_dev` and `preview_urls` off |
+
+| Check | Result |
+| --- | --- |
+| `npm run check` | 24 passed, including Access JWT: valid token accepted; forged signature, swapped payload, wrong audience or issuer, expired, not-yet-valid, missing email, `HS256`, `none`, unknown key, and unconfigured team/AUD all rejected |
+| Development run | Page renders, API works, a foreign origin gets 403 |
+| Production build run locally (`wrangler dev` on `dist`) | Page shows "Please sign in"; API with no token → 403 "Sign in to continue."; with the site origin and a forged token → 403; localhost origin → 403 |
+| `check:workers`, typecheck, lint, build | Passed |
+
+Not verified: a real Access token. That needs the deployed site and the AUD tag. Remaining owner input: `ACCESS_AUD`. Also still open: the first deploy (custom domain, Access application hostname).

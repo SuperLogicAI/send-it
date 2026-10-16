@@ -28,5 +28,15 @@
     ]
   },
   "workers_dev": false,
-  "preview_urls": false
+  "preview_urls": false,
+  "vars": {
+    "ACCESS_TEAM": "broad-wave-65e1",
+    "ACCESS_AUD": ""
+  },
+  "routes": [
+    {
+      "pattern": "sendit.day",
+      "custom_domain": true
+    }
+  ]
 }

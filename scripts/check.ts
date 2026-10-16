@@ -26,6 +26,7 @@ import {
 import { act } from "../lib/actions.ts";
 import { parseCsv } from "../lib/csv.ts";
 import { openStore } from "../lib/node-store.ts";
+import { AuthError, verifyAccess } from "../lib/access.ts";
 import { allowedOrigin } from "../lib/origin.ts";
 import { scenario } from "./scenario.ts";
 import { buildPrompt, parseReply } from "../lib/prompt.ts";
@@ -442,14 +443,63 @@ check("CSV handles quoted commas, escaped quotes and multiline notes", () => {
   assert.throws(() => parseCsv("name,email\nAlex,test@example.test,extra"));
 });
 
-check("origin guard allows only same-host localhost origins", () => {
-  assert.ok(allowedOrigin("http://localhost:3000", "localhost:3000"));
-  assert.ok(allowedOrigin("http://127.0.0.1:3000", "127.0.0.1:3000"));
-  assert.ok(!allowedOrigin("https://example.test", "localhost:3000"));
-  assert.ok(!allowedOrigin("http://localhost:3001", "localhost:3000"));
-  assert.ok(!allowedOrigin("malformed", "localhost:3000"));
-  assert.ok(!allowedOrigin(null, "localhost:3000"));
+check("origin guard: production accepts only the site, development also localhost", () => {
+  assert.ok(allowedOrigin("https://sendit.day", "sendit.day"));
+  assert.ok(allowedOrigin("https://sendit.day", "anything", true));
+  assert.ok(!allowedOrigin("http://localhost:3000", "localhost:3000"));
+  assert.ok(!allowedOrigin("https://sendit.day.evil.test", "sendit.day"));
+  assert.ok(!allowedOrigin("https://sendit.dev", "sendit.day"));
+  assert.ok(!allowedOrigin(null, "sendit.day"));
+  assert.ok(allowedOrigin("http://localhost:3000", "localhost:3000", true));
+  assert.ok(allowedOrigin("http://127.0.0.1:3000", "127.0.0.1:3000", true));
+  assert.ok(!allowedOrigin("https://example.test", "localhost:3000", true));
+  assert.ok(!allowedOrigin("http://localhost:3001", "localhost:3000", true));
+  assert.ok(!allowedOrigin("malformed", "localhost:3000", true));
 });
+
+{
+  const rsa = { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" };
+  const pair = await crypto.subtle.generateKey(rsa, true, ["sign", "verify"]);
+  const attacker = await crypto.subtle.generateKey(rsa, true, ["sign", "verify"]);
+  const jwk = { ...(await crypto.subtle.exportKey("jwk", pair.publicKey)), kid: "k1" };
+  const b64u = (v: string | ArrayBuffer) => Buffer.from(v as string).toString("base64url");
+  const sign = async (claims: object, opts: { kid?: string; alg?: string; key?: CryptoKey } = {}) => {
+    const h = b64u(JSON.stringify({ alg: opts.alg ?? "RS256", kid: opts.kid ?? "k1" })),
+      p = b64u(JSON.stringify(claims));
+    const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", opts.key ?? pair.privateKey, new TextEncoder().encode(`${h}.${p}`));
+    return `${h}.${p}.${b64u(sig)}`;
+  };
+  const cfg = { team: "team-x", aud: "aud-1" };
+  const sec = Date.now() / 1000;
+  const good = { iss: "https://team-x.cloudflareaccess.com", aud: ["aud-1"], exp: sec + 600, nbf: sec - 10, email: " Owner@Example.TEST " };
+  const keys = async () => [jwk];
+  const rejects = (token: string, config = cfg) =>
+    assert.rejects(verifyAccess(token, config, keys), AuthError);
+
+  assert.equal(await verifyAccess(await sign(good), cfg, keys), "owner@example.test");
+  assert.equal(await verifyAccess(await sign({ ...good, aud: "aud-1" }), cfg, keys), "owner@example.test");
+  await rejects("", cfg);
+  await rejects("a.b");
+  await rejects(await sign(good, { key: attacker.privateKey }));
+  {
+    // Swap in another owner's email but keep the original signature.
+    const [h, , sig] = (await sign(good)).split(".");
+    await rejects(`${h}.${b64u(JSON.stringify({ ...good, email: "victim@example.test" }))}.${sig}`);
+  }
+  await rejects(await sign(good, { kid: "unknown" }));
+  await rejects(await sign(good, { alg: "HS256" }));
+  await rejects(await sign(good, { alg: "none" }));
+  await rejects(await sign({ ...good, aud: ["other"] }));
+  await rejects(await sign({ ...good, iss: "https://evil.cloudflareaccess.com" }));
+  await rejects(await sign({ ...good, exp: sec - 1 }));
+  await rejects(await sign({ ...good, nbf: sec + 3600 }));
+  await rejects(await sign({ ...good, email: undefined }));
+  await rejects(await sign({ ...good, exp: undefined }));
+  await rejects(await sign(good), { team: "team-x", aud: "" });
+  await rejects(await sign(good), { team: "", aud: "aud-1" });
+  passed++;
+  console.log("✓ Access JWT: accepts a valid token; rejects forged, expired, wrong audience/issuer, bad algorithm, unknown key, unconfigured");
+}
 
 {
   const stores = { demo: openStore(), local: openStore() };
