@@ -2,39 +2,50 @@ import Link from "next/link";
 import { APP_ORIGIN } from "../lib/origin.ts";
 
 const REPO = "https://github.com/SuperLogicAI/send-it";
-const REQUEST = `mailto:contact@superlogicai.com?subject=${encodeURIComponent(
-  "Send It beta access",
-)}&body=${encodeURIComponent(
-  "Hi, I'd like to try Send It.\n\nWhat I do:\nWho I'd follow up with first:\nThe email to set up:\n",
-)}`;
 
 const steps = [
   {
-    title: "Three people, with a reason",
-    text: "Each day you see up to three people from your own contacts, and why they're on the list. “You sent a quote 15 days ago and haven't heard back.” No mystery ranking.",
+    title: "Three people, and why",
+    text: "Each morning you get up to three people from your own contacts, each with the reason they're on today's list. “You sent a quote 15 days ago and haven't heard back.” No mystery ranking.",
   },
   {
-    title: "A draft that sounds like you",
-    text: "Write your own, or tap Draft in ChatGPT or Draft in Claude. Send It builds the prompt from your notes about that person and copies it. You paste the reply back, edit it, and save.",
+    title: "A note that sounds like you",
+    text: "Write it yourself, or let ChatGPT or Claude draft it from what you know about that person and how you write. Change a word or keep it as it is.",
   },
   {
     title: "You press send",
-    text: "Review in Gmail opens a draft in your own account. You read it, press Send, then tap I sent it. Send It can't send email. There is no code in it that does.",
+    text: "It opens in your own Gmail. You read it and send it. Send It never sends anything on its own. Tap I sent it and that person is done for today.",
   },
 ];
 
 const promises = [
   {
     title: "No cold email. Ever.",
-    text: "Every person needs a recorded reason they know you: a conversation, an inquiry, an event, an introduction, a past client, or a sign-up. No reason, no spot on the list. The database refuses the contact.",
+    text: "Everyone on your list needs a real reason they know you: a conversation, an inquiry, an event, an introduction, a past project, or a sign-up. No reason, no spot on the list. The database refuses the contact.",
   },
   {
-    title: "You approve every message.",
-    text: "Send It drafts and queues. You decide what goes out, from your own account, under your own name.",
+    title: "Your list stays yours.",
+    text: "Each person using Send It gets their own private database. We never sell it, share it, or use it to find new people.",
   },
   {
-    title: "Busy week mode.",
-    text: "In a heavy week the list drops to one person a day. It never drops to zero, so your pipeline doesn't go quiet while you deliver.",
+    title: "Busy week? One a day.",
+    text: "In a heavy week the list drops to one person a day. It never drops to zero, so the pipeline doesn't go quiet while you deliver.",
+  },
+];
+
+const questions = [
+  {
+    q: "Do I have to connect my email?",
+    a: "No. Send It opens a ready draft in your own Gmail. It can't read your inbox or send anything.",
+  },
+  {
+    q: "Where do my people come from?",
+    a: "From you: people you've met, talked to, worked with, or who reached out. Add them one at a time or import a list of past clients or event sign-ups. Bought or scraped lists aren't allowed.",
+  },
+  { q: "What does it cost?", a: "Nothing during the beta." },
+  {
+    q: "Who's behind it?",
+    a: "Super Logic AI, an AI automation agency in Hawaii.",
   },
 ];
 
@@ -51,37 +62,53 @@ export default function Landing() {
           send it<span className="brand-dot">.</span>
         </Link>
         <nav aria-label="Main navigation">
-          <a href={REPO} target="_blank" rel="noopener noreferrer">
-            Code
-          </a>
+          <a href="#day">How it works</a>
           <a href={APP_ORIGIN}>Sign in</a>
         </nav>
       </header>
       <main className="site-main">
         <section className="site-hero">
-          <h1>A few thoughtful follow-ups. Then back to your client work.</h1>
+          <h1>Your next client already knows you.</h1>
           <p className="site-lead">
-            Most of your next client already knows you. A past call, a quote
-            that went quiet, someone who asked a question. Send It picks the few
-            worth a note today, tells you why, and helps you write it. You send
-            it yourself.
+            A quote that went quiet. A great call from March. Someone who asked
+            a question and never heard back. Send It finds a few of them each
+            morning, tells you why today, and helps you write a short note. You
+            read it and press send from your own Gmail. About ten minutes, then
+            back to client work.
           </p>
           <div className="site-cta">
-            <a className="primary" href={REQUEST}>
-              Request beta access <span aria-hidden="true">↗</span>
+            <a className="primary" href="#join">
+              Get early access <span aria-hidden="true">↓</span>
             </a>
-            <small>Invite-only beta. Free while we learn what you need.</small>
+            <small>Free during the beta. Nothing to connect, nothing to install.</small>
           </div>
           <figure className="site-shot">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/demo.png"
-              width={1200}
-              height={1310}
-              alt="Send It showing a person to follow up with today, the reason they are on the list, and a drafted message to review"
-            />
+            <picture>
+              <source
+                media="(max-width: 640px)"
+                srcSet="/demo-card.png"
+                width={700}
+                height={1600}
+              />
+              <img
+                src="/demo.png"
+                width={1200}
+                height={1310}
+                alt="Send It showing a person to follow up with today, the reason they are on the list, and a drafted message to review"
+              />
+            </picture>
             <figcaption>Fictional example people and messages.</figcaption>
           </figure>
+        </section>
+
+        <section className="site-open" aria-labelledby="cycle">
+          <h2 id="cycle">Sell, deliver, scramble, repeat.</h2>
+          <p>
+            When the calendar&apos;s empty, you sell hard. Deals close and you go
+            heads-down on the work. Selling stops. The project wraps up and the
+            pipeline is empty again. Send It is built for the middle part: the
+            weeks you&apos;re too busy to sell.
+          </p>
         </section>
 
         <section aria-labelledby="day">
@@ -112,12 +139,12 @@ export default function Landing() {
         </section>
 
         <section className="site-open" aria-labelledby="streak">
-          <h2 id="streak">Keep it going</h2>
+          <h2 id="streak">A habit that survives busy weeks</h2>
           <p>
-            One follow-up on a workday keeps your streak alive. Reach five in a
-            week and you bank a skip, up to five, enough to cover a week away.
-            A sick day or a vacation week won&apos;t reset you. You also earn
-            badges, including one for your first reply.
+            A busy week or a sick day won&apos;t wipe out your progress. One
+            follow-up on a workday keeps your streak going, and weekends never
+            count against you. Have a strong week and you bank a day off. Replies
+            and booked calls earn badges too.
           </p>
         </section>
 
@@ -145,15 +172,50 @@ export default function Landing() {
           </p>
         </section>
 
-        <section className="site-final" aria-labelledby="want">
+        <section aria-labelledby="questions">
+          <h2 id="questions">Questions</h2>
+          <dl className="site-grid site-faq">
+            {questions.map((item) => (
+              <div key={item.q}>
+                <dt>{item.q}</dt>
+                <dd>{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section className="site-final" id="join" aria-labelledby="want">
           <h2 id="want">Want in?</h2>
           <p>
-            Tell us what you do and who you&apos;d follow up with first. We&apos;ll
-            set you up with a login.
+            Tell us what you do and who you&apos;d follow up with first.
+            We&apos;ll send your login.
           </p>
-          <a className="primary" href={REQUEST}>
-            Request beta access <span aria-hidden="true">↗</span>
-          </a>
+          <p className="site-done" id="thanks" role="status">
+            Thanks. You&apos;re on the list, and we&apos;ll email your login.
+          </p>
+          <p className="site-done error" id="signup-error" role="alert">
+            That didn&apos;t go through. Check your email address and try again.
+          </p>
+          <form className="site-form" method="post" action="/api/signup">
+            <label>
+              <span>Your email</span>
+              <input name="email" type="email" required autoComplete="email" />
+            </label>
+            <label>
+              <span>What you do</span>
+              <input name="what" maxLength={500} placeholder="I build websites for local studios" />
+            </label>
+            <label>
+              <span>Who you&apos;d follow up with first</span>
+              <input name="who" maxLength={500} placeholder="A quote from last month" />
+            </label>
+            {/* Hidden from people; bots fill it in. */}
+            <label className="site-trap" aria-hidden="true">
+              Website
+              <input name="website" tabIndex={-1} autoComplete="off" />
+            </label>
+            <button className="primary">Get early access</button>
+          </form>
         </section>
       </main>
       <footer>
@@ -167,7 +229,9 @@ export default function Landing() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo_b.png" alt="Super Logic AI" width={104} height={14} />
         </a>
-        <span>Good relationships deserve a little attention.</span>
+        <a href={REPO} target="_blank" rel="noopener noreferrer">
+          Open source on GitHub
+        </a>
       </footer>
     </div>
   );

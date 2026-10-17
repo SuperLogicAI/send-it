@@ -1,11 +1,15 @@
 import { OwnerStore } from "../../store/src/index.ts";
-import { transaction } from "../../lib/store.ts";
+import { migrate, transaction } from "../../lib/store.ts";
 
 // Test-only: the real OwnerStore plus raw SQL access, reachable over HTTP from
 // check-workers.ts. Never deployed.
 export class TestStore extends OwnerStore {
   sql(query: string, ...bindings: unknown[]) {
     return this.ctx.storage.sql.exec(query, ...bindings).toArray();
+  }
+  migrateNow() {
+    migrate(this.db);
+    return this.sql("SELECT sql FROM sqlite_master WHERE name='touches'")[0];
   }
   rollbackProbe() {
     try {

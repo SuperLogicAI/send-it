@@ -16,7 +16,9 @@ import {
   confirmSent,
   contacts,
   ensureDay,
+  migrate,
   pendingTouch,
+  profile,
   recordOutcome,
   saveDraft,
   seedDemo,
@@ -26,7 +28,7 @@ import {
 } from "../lib/store.ts";
 import { act } from "../lib/actions.ts";
 import { parseCsv } from "../lib/csv.ts";
-import { openStore } from "../lib/node-store.ts";
+import { openStore as openRaw } from "../lib/node-store.ts";
 import { AuthError, verifyAccess } from "../lib/access.ts";
 import { allowedOrigin, isSiteHost } from "../lib/origin.ts";
 import { scenario } from "./scenario.ts";
@@ -37,6 +39,12 @@ const now = new Date("2026-10-15T21:00:00.000Z");
 const shiftDayForTest = (day: string, n: number) => shiftDay(day, n);
 const ago = (days: number) =>
   new Date(now.getTime() - days * DAY).toISOString();
+// Most checks assume the browser already reported the owner's timezone.
+function openStore(path?: string) {
+  const db = openRaw(path);
+  db.exec("UPDATE profile SET timezone='Pacific/Honolulu' WHERE timezone=''");
+  return db;
+}
 let passed = 0;
 function check(name: string, fn: () => void) {
   fn();
@@ -209,12 +217,105 @@ check(
   },
 );
 
-check("empty days stay empty when new contacts are imported", () => {
+check("people added later the same day fill open slots", () => {
   const db = openStore();
   assert.equal(today(db, now).cards.length, 0);
   addContact(db, parseContact(base, now));
+  assert.equal(today(db, now).cards.length, 1);
+  addContact(
+    db,
+    parseContact({ ...base, email: "second@example.test" }, now),
+  );
+  assert.equal(today(db, now).cards.length, 2);
+  db.close();
+});
+
+check("no list is saved until the browser reports a timezone", () => {
+  const db = openRaw();
+  addContact(db, parseContact(base, now));
+  assert.equal(profile(db).timezone_unset, true);
   assert.equal(today(db, now).cards.length, 0);
-  assert.equal(today(db, new Date(now.getTime() + DAY)).cards.length, 1);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM daily_runs").get()!.n, 0);
+  act(db, "local", { action: "timezone", timezone: "America/New_York" }, now);
+  assert.equal(profile(db).timezone, "America/New_York");
+  assert.equal(today(db, now).cards.length, 1);
+  act(db, "local", { action: "timezone", timezone: "Europe/London" }, now);
+  assert.equal(profile(db).timezone, "America/New_York", "set only once");
+  assert.throws(() =>
+    act(db, "local", { action: "timezone", timezone: "Mars/Base" }, now),
+  );
+  db.close();
+});
+
+check("event and introduction contacts get their own cards", () => {
+  const db = openStore();
+  const add = (email: string, extra: Record<string, unknown>) =>
+    addContact(
+      db,
+      parseContact(
+        {
+          name: "Example",
+          email,
+          signal_evidence: "A real, recorded connection to this person.",
+          ...extra,
+        },
+        now,
+      ),
+    );
+  add("event@example.test", { signal_source: "event", signal_at: ago(5) });
+  add("old-event@example.test", { signal_source: "event", signal_at: ago(40) });
+  add("fresh-event@example.test", { signal_source: "event", signal_at: ago(1) });
+  add("intro@example.test", { signal_source: "referral", signal_at: ago(200) });
+  add("subscriber@example.test", { signal_source: "opt_in", signal_at: ago(90) });
+  const picked = rankContacts(contacts(db), now, "Pacific/Honolulu").map(
+    (p) => [p.contact.email, p.kind],
+  );
+  assert.deepEqual(picked.sort(), [
+    ["event@example.test", "event_followup"],
+    ["intro@example.test", "introduction"],
+  ]);
+  const cards = today(db, now).cards;
+  assert.equal(cards.length, 2, "the database accepts the new kinds");
+  db.close();
+});
+
+check("older touches tables migrate to the new kinds and keep history", () => {
+  const db = openRaw();
+  db.exec(`DROP TABLE touches;
+    CREATE TABLE touches (id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id),
+      day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','dormant')),
+      reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sent','skipped')),
+      sent_at TEXT, next_step_snapshot TEXT, next_step_at_snapshot TEXT, outcome TEXT,
+      UNIQUE(contact_id,day), UNIQUE(day,position));
+    UPDATE profile SET timezone='Pacific/Honolulu';`);
+  const id = addContact(db, parseContact(base, now));
+  db.exec("INSERT INTO daily_runs(day) VALUES('2026-10-01')");
+  db.prepare(
+    "INSERT INTO touches(contact_id,day,position,kind,reason,status,sent_at) VALUES(?,'2026-10-01',0,'dormant','Old','sent','2026-10-01T20:00:00.000Z')",
+  ).run(id);
+  migrate(db);
+  assert.equal(profile(db).timezone_unset, true, "unsaved profile re-detects");
+  assert.equal(
+    db.prepare("SELECT reason FROM touches").get()!.reason,
+    "Old",
+  );
+  db.exec("INSERT INTO daily_runs(day) VALUES('2026-10-02')");
+  db.prepare(
+    "INSERT INTO touches(contact_id,day,position,kind,reason) VALUES(?,'2026-10-02',0,'event_followup','New')",
+  ).run(id);
+  db.close();
+});
+
+check("the demo rebuilds itself on a new day with fresh drafts", () => {
+  const db = openStore();
+  const first = act(db, "demo", { action: "workspace" }, now);
+  assert.equal(first.state.cards.length, 3);
+  const later = new Date(now.getTime() + 3 * DAY);
+  const next = act(db, "demo", { action: "workspace" }, later);
+  assert.equal(next.state.cards.length, 3);
+  assert.ok(next.state.cards.every((c) => c.body.trim()));
   db.close();
 });
 
@@ -566,7 +667,7 @@ check("only the bare domain serves the public landing page", () => {
 }
 
 {
-  const stores = { demo: openStore(), local: openStore() };
+  const stores = { demo: openRaw(), local: openRaw() };
   await scenario(async (mode, input) => act(stores[mode], mode, input));
   passed++;
   console.log(

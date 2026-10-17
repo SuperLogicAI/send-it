@@ -24,14 +24,14 @@ Developer setup belongs here, not in the owner's daily workflow. Once running, t
 
 ## How it is hosted
 
-Two Cloudflare Workers: the app (Next.js on [vinext](https://github.com/cloudflare/vinext)) and `send-it-store`, which holds one SQLite Durable Object per owner and workspace, so there is no owner column to forget. The app reaches the store by binding only; the store has no public address. Sign-in is Cloudflare Access (one-time email codes for the beta); the Worker verifies the Access token itself and keys each owner by their verified email. The bare domain serves a public landing page and has no access to owner data. A one-click "deploy your own" guide is planned (plan step 2.7).
+Two Cloudflare Workers: the app (Next.js on [vinext](https://github.com/cloudflare/vinext)) and `send-it-store`, which holds one SQLite Durable Object per owner and workspace, so there is no owner column to forget. The app reaches the store by binding only; the store has no public address. Sign-in is Cloudflare Access (one-time email codes for the beta); the Worker verifies the Access token itself and keys each owner by their verified email. The bare domain serves a public landing page. Its beta form writes only to a separate `signups` store and has no access to owner data; emails in `ADMIN_EMAILS` can download sign-ups as CSV at `app.sendit.day/api/signups`. A one-click "deploy your own" guide is planned (plan step 2.7).
 
 ## What works
 
 - A persistent SQLite contact model requiring an allowed relationship source, real context, and valid dates.
 - Manual contact entry and CSV preview/import. Invalid rows are explained, and duplicate addresses do not overwrite history.
 - Deterministic ranking: unanswered recorded inbound activity, due next steps, stalled quotes, and dormant warm/client relationships.
-- A saved daily selection with no automatic replacements after skipping, snoozing, or suppression. Days follow the owner's timezone.
+- A saved daily selection with no automatic replacements after skipping, snoozing, or suppression. Days follow the owner's timezone, read from the browser on first visit and editable in Your business.
 - Editable messages, explicit saving, **Review in Gmail**, and a **Copy** fallback.
 - **I sent it** records an owner-confirmed send once. Opening Gmail or copying does not count. Send It has no mail-sending API or background sender.
 - Busy-week mode, snooze dates, and do-not-contact.
@@ -39,7 +39,7 @@ Two Cloudflare Workers: the app (Next.js on [vinext](https://github.com/cloudfla
 - Reply/booking/no-response recording with a next step and date. Booking alone never creates a two-way-exchange record.
 - Separate fictional and personal workspaces, each its own Durable Object database.
 
-After adding or importing your first people, use **Prepare today's people** if the daily list is empty. Once a nonempty selection is saved, additional imports can appear the next day. Switching mode does not undo completed work or discard reserved cards.
+People you add or import join today's list right away while it has fewer than three. Sent, skipped, and stopped cards keep their slot, so nobody is swapped in for them. Switching mode does not undo completed work or discard reserved cards.
 
 ## What's next
 

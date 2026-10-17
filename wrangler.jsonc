@@ -31,7 +31,9 @@
   "preview_urls": false,
   "vars": {
     "ACCESS_TEAM": "broad-wave-65e1",
-    "ACCESS_AUD": "71dee65aa3809f6b36311bd444cea98bf9595c37d0425c856fa739359b15ba4c"
+    "ACCESS_AUD": "71dee65aa3809f6b36311bd444cea98bf9595c37d0425c856fa739359b15ba4c",
+    // Signed-in emails allowed to download beta sign-ups at /api/signups.
+    "ADMIN_EMAILS": "contact@superlogicai.com"
   },
   "routes": [
     {

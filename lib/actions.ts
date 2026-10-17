@@ -1,15 +1,17 @@
 import { parseContact, type ContactInput } from "./rules.ts";
 import {
   addContact,
-  allTouches,
   confirmSent,
   contacts,
   pendingTouch,
+  profile,
   recordOutcome,
+  resetStaleDemo,
   saveDraft,
   saveProfile,
   seedDemo,
   seedDemoHistory,
+  setTimezone,
   skip,
   snooze,
   today,
@@ -34,6 +36,9 @@ export type Payload = {
 };
 
 function prepareDemo(db: Store, now: Date) {
+  // Sample dates depend on the owner's day; wait for the timezone.
+  if (profile(db).timezone_unset) return;
+  resetStaleDemo(db, now);
   seedDemo(db, now);
   seedDemoHistory(db, now);
 }
@@ -64,6 +69,9 @@ export function act(
       db.prepare("UPDATE profile SET busy_week=? WHERE id=1").run(
         input.enabled === true ? 1 : 0,
       );
+      break;
+    case "timezone":
+      setTimezone(db, str("timezone"));
       break;
     case "profile":
       saveProfile(db, input);
@@ -120,15 +128,6 @@ export function act(
       extra = { preview: rows, accepted: valid.length };
       break;
     }
-    case "prepare": {
-      const state = today(db, now);
-      if (allTouches(db, state.day).length)
-        throw new Error(
-          "Today's list is already saved. Your new people can appear tomorrow.",
-        );
-      db.prepare("DELETE FROM daily_runs WHERE day=?").run(state.day);
-      break;
-    }
     case "draft":
       saveDraft(db, id, str("subject"), str("body"), now);
       break;
@@ -176,7 +175,7 @@ export function act(
         db,
         id,
         str("outcome"),
-        str("eventAt"),
+        str("eventAt") || now.toISOString(),
         str("next_step"),
         str("next_step_at"),
         now,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import type { Contact } from "../lib/rules.ts";
 import { dateLabel, shiftDay } from "../lib/rules.ts";
@@ -34,6 +34,8 @@ const kinds: Record<string, string> = {
   inbound: "A recent inquiry",
   next_step_due: "A promise to keep",
   quote_followup: "A quote to revisit",
+  event_followup: "After the event",
+  introduction: "A warm introduction",
   dormant: "A familiar face",
 };
 
@@ -106,6 +108,21 @@ export default function Dashboard({
   };
   const state = data.state,
     demo = data.workspace === "demo";
+  // Each workspace learns its timezone from the browser once, before any list.
+  const unset = state.profile.timezone_unset;
+  useEffect(() => {
+    if (!unset) return;
+    void fetch("/api/engine", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "timezone",
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      }),
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((result) => result && setData(result));
+  }, [unset]);
   const active = state.cards.find((c) => c.id === activeId) || state.cards[0];
   const day = new Intl.DateTimeFormat("en-US", {
     weekday: "long",
@@ -140,7 +157,9 @@ export default function Dashboard({
           ))}
         </nav>
         <span className="local-status">
-          <span /> Private to you
+          <span /> Private to you ·{" "}
+          {/* Cloudflare Access ends the app session at this path. */}
+          <a href="/cdn-cgi/access/logout">Sign out</a>
         </span>
       </header>
 
@@ -237,9 +256,8 @@ export default function Dashboard({
               <span>
                 {state.handled > 0
                   ? `${state.handled} handled today`
-                  : state.cards.length === 1
-                    ? "About 5 minutes"
-                    : "About 10 minutes"}
+                  : state.cards.length > 0 &&
+                    `About ${state.cards.length * 3} minutes`}
               </span>
             </div>
             {state.cards.length > 0 && (
@@ -287,42 +305,31 @@ export default function Dashboard({
                   />
                 ) : (
                   <section className="empty panel">
-                    <div className="empty-symbol" aria-hidden="true">
-                      ✓
-                    </div>
-                    <p className="eyebrow">A LITTLE SPACE IN YOUR DAY</p>
+                    {state.handled >= state.target && (
+                      <div className="empty-symbol" aria-hidden="true">
+                        ✓
+                      </div>
+                    )}
                     <h2>
                       {state.handled >= state.target
                         ? "You've done your part today."
-                        : "Your next conversation starts here."}
+                        : state.totalContacts
+                          ? "Nobody is due right now."
+                          : "Let's find your first three people."}
                     </h2>
                     <p>
                       {state.handled >= state.target
                         ? "Back to your client work. Your next list will be here tomorrow."
                         : state.totalContacts
-                          ? "There are no remaining people to follow up with right now. We only suggest a message when the relationship and timing fit."
-                          : "Add a few people you already know, with a note about your connection."}
+                          ? "We only suggest a message when the relationship and timing fit. Add someone you've talked to recently and they can join today's list."
+                          : "Start with people you already know: past clients, a recent call, someone who asked a question."}
                     </p>
-                    {state.totalContacts === 0 && (
+                    {state.handled < state.target && (
                       <button
                         className="primary"
                         onClick={() => setTab("people")}
                       >
-                        Add your first person <Arrow />
-                      </button>
-                    )}
-                    {state.handled === 0 && state.totalContacts > 0 && (
-                      <button
-                        className="secondary"
-                        disabled={busy}
-                        onClick={() =>
-                          void mutate(
-                            { action: "prepare" },
-                            "Today's people are ready if any relationships are due.",
-                          ).catch(() => {})
-                        }
-                      >
-                        Prepare today&apos;s people
+                        Add someone or import a list <Arrow />
                       </button>
                     )}
                   </section>
@@ -696,7 +703,7 @@ function Editor({
               { action: "sent", ...payload },
               demo
                 ? "Demo send recorded. No email was sent by Send It."
-                : "Your follow-up is recorded as sent by you.",
+                : `Nice. ${touch.contact.name.split(" ")[0]} is done for today.`,
             ).catch(() => {})
           }
         >
@@ -798,7 +805,7 @@ function People({
               const form = event.currentTarget;
               void mutate(
                 { action: "add", ...input },
-                "Person saved. Prepare today's people if your list is empty.",
+                "Saved. If they're due, they're on today's list.",
               )
                 .then(() => form.reset())
                 .catch(() => {});
@@ -929,8 +936,8 @@ function People({
               Import a CSV instead <span>Up to 500 people</span>
             </summary>
             <p>
-              Each row needs name, email, signal_source, signal_evidence and
-              signal_at. Two-way conversations also need last_two_way_at.
+              Each person needs a name, an email, how you know them, what
+              happened, and when. Download the example to see the layout.
             </p>
             <a className="text-link" href="/sample-contacts.csv" download>
               Download a fictional example CSV ↗
@@ -1037,12 +1044,18 @@ function People({
               <button
                 className="text-button"
                 disabled={busy}
-                onClick={() =>
+                onClick={() => {
+                  if (
+                    !confirm(
+                      `Stop suggesting ${c.name}? This can't be undone yet.`,
+                    )
+                  )
+                    return;
                   void mutate(
                     { action: "suppress", id: c.id },
-                    "This person will no longer be suggested.",
-                  ).catch(() => {})
-                }
+                    `${c.name} won't be suggested again.`,
+                  ).catch(() => {});
+                }}
               >
                 Do not contact
               </button>
@@ -1067,7 +1080,7 @@ function ProfileForm({
     <section className="panel form-panel profile-form">
       <h2>Your business, in your words</h2>
       <p className="muted">
-        Save this context now. Connecting AI drafting is the next increment.
+        Send It uses this to write notes that sound like you.
       </p>
       <form
         onSubmit={(event) =>
@@ -1156,6 +1169,13 @@ function ProfileForm({
   );
 }
 
+const outcomes: Record<string, string> = {
+  replied: "Replied",
+  booked: "Call booked",
+  no_response: "No reply yet",
+  not_now: "Not now",
+};
+
 function Outcome({
   touch,
   day,
@@ -1167,8 +1187,7 @@ function Outcome({
   mutate: Mutate;
   busy: boolean;
 }) {
-  const [open, setOpen] = useState(false),
-    [eventTime, setEventTime] = useState("");
+  const [open, setOpen] = useState(false);
   return (
     <div className="outcome panel">
       <div className="outcome-summary">
@@ -1179,21 +1198,13 @@ function Outcome({
           <strong>{touch.contact.name}</strong>
           <small>
             {touch.outcome
-              ? `Recorded: ${touch.outcome.replaceAll("_", " ")}`
+              ? outcomes[touch.outcome]
               : "You confirmed this follow-up was sent"}
           </small>
         </div>
         <button
           className="text-button"
-          onClick={() => {
-            const date = new Date();
-            setEventTime(
-              new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-                .toISOString()
-                .slice(0, 23),
-            );
-            setOpen(!open);
-          }}
+          onClick={() => setOpen(!open)}
         >
           Record a result
         </button>
@@ -1204,13 +1215,10 @@ function Outcome({
           onSubmit={(event) => {
             const input = values(event);
             void mutate(
-              {
-                action: "outcome",
-                id: touch.id,
-                ...input,
-                eventAt: new Date(String(input.eventAt)).toISOString(),
-              },
-              "Result saved. Bookings are kept separate from two-way conversations.",
+              { action: "outcome", id: touch.id, ...input },
+              input.next_step
+                ? `Saved. ${touch.contact.name.split(" ")[0]} will come back when the next step is due.`
+                : "Saved.",
             )
               .then(() => setOpen(false))
               .catch(() => {});
@@ -1222,15 +1230,6 @@ function Outcome({
               <option value="booked">A meeting was booked</option>
               <option value="no_response">No response recorded</option>
             </select>
-          </Field>
-          <Field label="When did it happen?">
-            <input
-              name="eventAt"
-              type="datetime-local"
-              step="0.001"
-              required
-              defaultValue={eventTime}
-            />
           </Field>
           <Field label="Next step (optional)">
             <input name="next_step" placeholder="prepare for the meeting" />

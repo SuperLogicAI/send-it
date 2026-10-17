@@ -1,3 +1,10 @@
+/* Self-hosted so every platform sees the same brand, with no third-party request. */
+@font-face {
+  font-family: "Figtree";
+  src: url("/fonts/figtree.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
 :root {
   --paper: #f5f6f0;
   --ink: #173e32;
@@ -5,8 +12,8 @@
   --green: #126344;
   --lime: #d1f568;
   --accent: #c65324;
-  --font-body: "Avenir Next", Avenir, "Segoe UI", sans-serif;
-  --font-display: "Avenir Next", Avenir, "Trebuchet MS", sans-serif;
+  --font-body: "Figtree", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-display: "Figtree", "Avenir Next", Avenir, "Segoe UI", sans-serif;
   --line: #d7dfd2;
   --white: #fffefb;
   --radius: 18px;
@@ -164,6 +171,9 @@ small {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.local-status a {
+  color: inherit;
 }
 .local-status > span {
   width: 6px;
@@ -1234,6 +1244,7 @@ footer {
   margin: 0;
   font-family: var(--font-display);
   font-size: clamp(32px, 5.4vw, 58px);
+  font-weight: 900;
   line-height: 1.08;
   letter-spacing: -0.02em;
 }
@@ -1343,6 +1354,72 @@ footer {
   margin-right: auto;
   padding-left: 16px;
   padding-right: 16px;
+}
+.site footer a {
+  color: inherit;
+}
+.site-faq {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+.site-faq div {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+.site-faq dt {
+  margin-bottom: 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.site-faq dd {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.site-form {
+  display: grid;
+  gap: 14px;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: left;
+}
+.site-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.site-form input {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  font-size: 16px;
+}
+.site-form .primary {
+  justify-self: start;
+}
+/* Off-screen, not display:none, so simple bots still fill it in. */
+.site-trap {
+  position: absolute;
+  left: -10000px;
+}
+/* The sign-up form posts without JavaScript and answers with #thanks or
+   #signup-error; only the matching message shows. */
+.site-done {
+  display: none;
+  font-weight: 700;
+  color: var(--green) !important;
+}
+.site-done.error {
+  color: var(--accent) !important;
+}
+.site-done:target {
+  display: block;
+}
+#join {
+  scroll-margin-top: 24px;
 }
 @media (max-width: 600px) {
   .site-hero {

@@ -1,10 +1,26 @@
 // Shared by the Node store (node:sqlite) and the Durable Object store.
 // Plain SQL only: no PRAGMA, no JavaScript SQL functions.
+
+// Shared with migrate() in store.ts, which rebuilds older tables whose
+// kind CHECK predates the event and introduction kinds.
+export const TOUCHES = `
+  id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id),
+  day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL,
+  kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','event_followup','introduction','dormant')),
+  reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sent','skipped')),
+  sent_at TEXT CHECK(sent_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',sent_at) IS sent_at),
+  next_step_snapshot TEXT, next_step_at_snapshot TEXT,
+  outcome TEXT CHECK(outcome IS NULL OR outcome IN ('replied','booked','no_response','not_now')),
+  UNIQUE(contact_id,day), UNIQUE(day,position),
+  CHECK((status='sent')=(sent_at IS NOT NULL))
+`;
+
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS profile (
   id INTEGER PRIMARY KEY CHECK(id=1), owner_email TEXT NOT NULL DEFAULT '',
   what_you_do TEXT NOT NULL DEFAULT '', best_clients TEXT NOT NULL DEFAULT '', result_they_want TEXT NOT NULL DEFAULT '',
-  voice_sample TEXT NOT NULL DEFAULT '', never_say TEXT NOT NULL DEFAULT '', timezone TEXT NOT NULL DEFAULT 'Pacific/Honolulu',
+  voice_sample TEXT NOT NULL DEFAULT '', never_say TEXT NOT NULL DEFAULT '', timezone TEXT NOT NULL DEFAULT '',
   busy_week INTEGER NOT NULL DEFAULT 0 CHECK(busy_week IN (0,1)), demo INTEGER NOT NULL DEFAULT 0 CHECK(demo IN (0,1))
 );
 INSERT OR IGNORE INTO profile(id) VALUES(1);
@@ -27,16 +43,5 @@ CREATE TABLE IF NOT EXISTS contacts (
   CHECK((next_step IS NULL)=(next_step_at IS NULL))
 );
 CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY CHECK(date(day) IS day));
-CREATE TABLE IF NOT EXISTS touches (
-  id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id),
-  day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL,
-  kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','dormant')),
-  reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sent','skipped')),
-  sent_at TEXT CHECK(sent_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',sent_at) IS sent_at),
-  next_step_snapshot TEXT, next_step_at_snapshot TEXT,
-  outcome TEXT CHECK(outcome IS NULL OR outcome IN ('replied','booked','no_response','not_now')),
-  UNIQUE(contact_id,day), UNIQUE(day,position),
-  CHECK((status='sent')=(sent_at IS NOT NULL))
-);
+CREATE TABLE IF NOT EXISTS touches (${TOUCHES});
 `;

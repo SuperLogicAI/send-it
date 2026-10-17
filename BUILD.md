@@ -51,7 +51,7 @@ Open **http://127.0.0.1:3000**. Dependencies are already installed in this works
 3. Try Copy or Review in Gmail. Confirm the floor has not increased. Close any fictional compose window without sending it.
 4. Use **I sent it** only in the fictional demo to simulate confirmation. Confirm the floor increases once and reload preserves it.
 5. Toggle Busy week. If one card has already been completed, no additional card should be required that day.
-6. Switch to **Use my own contacts**. Confirm this workspace starts empty. Add a real warm contact with accurate evidence and activity dates, or import an appropriate CSV. Use **Prepare today's people** when the selection is empty.
+6. Switch to **Use my own contacts**. Confirm this workspace starts empty. Add a real warm contact with accurate evidence and activity dates, or import an appropriate CSV. They join today's list right away if they're due.
 
 The sample CSV contains fictional people and fixed historical dates. Inspect it as a format example; avoid mixing its rows with your actual contacts.
 

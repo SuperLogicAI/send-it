@@ -12,6 +12,7 @@ import {
   type Kind,
 } from "./rules.ts";
 import { badges, isWorkday, replayStreak } from "./streak.ts";
+import { TOUCHES } from "./schema.ts";
 
 export type Profile = {
   owner_email: string;
@@ -21,6 +22,8 @@ export type Profile = {
   voice_sample: string;
   never_say: string;
   timezone: string;
+  // True until the browser reports the owner's timezone (see setTimezone).
+  timezone_unset: boolean;
   busy_week: number;
   demo: number;
 };
@@ -57,8 +60,12 @@ export type Store = {
 export function profile(db: Store): Profile {
   // node:sqlite returns null-prototype rows. Copy them into plain objects
   // before they reach React's Server Component serialization boundary.
-  const row = db.prepare("SELECT * FROM profile WHERE id=1").get();
-  return { ...row } as unknown as Profile;
+  const row = db.prepare("SELECT * FROM profile WHERE id=1").get()!;
+  return {
+    ...row,
+    timezone: row.timezone || "UTC",
+    timezone_unset: !row.timezone,
+  } as unknown as Profile;
 }
 export function contacts(db: Store): Contact[] {
   return db
@@ -108,23 +115,61 @@ export function transaction<T>(db: Store, fn: () => T): T {
   }
 }
 
+// Runs once per store open. SQLite can't alter a CHECK, so an older touches
+// table is rebuilt with the current kinds. Profiles that were never saved
+// lose the old Honolulu default, so the browser's timezone is used instead.
+export function migrate(db: Store) {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE name='touches'")
+    .get();
+  if (String(table?.sql).includes("event_followup")) return;
+  transaction(db, () => {
+    db.exec(`CREATE TABLE touches_next (${TOUCHES});
+      INSERT INTO touches_next SELECT * FROM touches;
+      DROP TABLE touches;
+      ALTER TABLE touches_next RENAME TO touches;
+      UPDATE profile SET timezone='' WHERE timezone='Pacific/Honolulu' AND owner_email='' AND what_you_do='';`);
+  });
+}
+
+export function setTimezone(db: Store, timezone: string) {
+  try {
+    localDay(new Date(), timezone);
+  } catch {
+    throw new Error("Choose a valid timezone, such as Pacific/Honolulu.");
+  }
+  db.prepare("UPDATE profile SET timezone=? WHERE id=1 AND timezone=''").run(
+    timezone,
+  );
+}
+
 export function ensureDay(db: Store, now = new Date()): string {
   const prefs = profile(db),
     day = localDay(now, prefs.timezone);
+  // No list until the browser reports the timezone, so a first visit can't
+  // save one under the wrong date.
+  if (prefs.timezone_unset) return day;
   return transaction(db, () => {
-    if (db.prepare("SELECT day FROM daily_runs WHERE day=?").get(day))
-      return day;
-    db.prepare("INSERT INTO daily_runs(day) VALUES(?)").run(day);
+    db.prepare("INSERT OR IGNORE INTO daily_runs(day) VALUES(?)").run(day);
+    // Fill open slots up to three, the same day. Sent, skipped and
+    // suppressed cards keep their slot, so nobody is swapped in for them.
+    const taken = db
+      .prepare("SELECT contact_id,position FROM touches WHERE day=?")
+      .all(day);
+    if (taken.length >= 3) return day;
+    const ids = new Set(taken.map((t) => Number(t.contact_id)));
+    let position = Math.max(-1, ...taken.map((t) => Number(t.position))) + 1;
     rankContacts(contacts(db), now, prefs.timezone)
-      .slice(0, 3)
-      .forEach((pick, index) => {
+      .filter((pick) => !ids.has(pick.contact.id))
+      .slice(0, 3 - taken.length)
+      .forEach((pick) => {
         const c = pick.contact;
         db.prepare(
           `INSERT INTO touches(contact_id,day,position,kind,reason,next_step_snapshot,next_step_at_snapshot) VALUES(?,?,?,?,?,?,?)`,
         ).run(
           c.id,
           day,
-          index,
+          position++,
           pick.kind,
           pick.reason,
           c.next_step,
@@ -275,7 +320,7 @@ export function saveProfile(db: Store, raw: Record<string, unknown>) {
   const email = text("owner_email").toLowerCase();
   if (email && !emailValid(email))
     throw new Error("Add a valid sending email address.");
-  const timezone = text("timezone") || "Pacific/Honolulu";
+  const timezone = text("timezone") || "UTC";
   try {
     localDay(new Date(), timezone);
   } catch {
@@ -335,6 +380,24 @@ export function recordOutcome(
         "UPDATE contacts SET next_step=?,next_step_at=? WHERE id=?",
       ).run(nextStep.trim(), nextDay, t.contact_id);
   });
+}
+
+// The demo is fictional, so it is rebuilt each day: sample drafts and
+// dates only make sense on the day they were written.
+export function resetStaleDemo(db: Store, now = new Date()) {
+  const prefs = profile(db);
+  if (!prefs.demo) return;
+  if (
+    db
+      .prepare("SELECT 1 FROM daily_runs WHERE day=?")
+      .get(localDay(now, prefs.timezone))
+  )
+    return;
+  transaction(db, () =>
+    db.exec(
+      "DELETE FROM touches; DELETE FROM daily_runs; DELETE FROM contacts;",
+    ),
+  );
 }
 
 export function seedDemo(db: Store, now = new Date()) {

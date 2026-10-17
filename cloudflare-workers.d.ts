@@ -23,11 +23,14 @@ declare module "cloudflare:workers" {
   export const env: {
     ACCESS_TEAM: string;
     ACCESS_AUD: string;
+    ADMIN_EMAILS: string;
     OWNER_STORE: {
       idFromName(name: string): unknown;
       get(id: unknown): {
         view(mode: Mode): Promise<Payload>;
         act(mode: Mode, input: Record<string, unknown>): Promise<Payload>;
+        signup(email: string, what: string, who: string): Promise<void>;
+        signups(): Promise<Record<string, string>[]>;
       };
     };
   };

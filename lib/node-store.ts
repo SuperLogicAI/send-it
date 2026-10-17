@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { SCHEMA } from "./schema.ts";
+import { migrate } from "./store.ts";
 
 // Node-only SQLite, used by the check scripts. Production uses the Durable Object.
 export function openStore(path = ":memory:") {
@@ -14,5 +15,6 @@ export function openStore(path = ":memory:") {
     PRAGMA journal_mode=WAL;
     ${SCHEMA}
   `);
+  migrate(db);
   return db;
 }

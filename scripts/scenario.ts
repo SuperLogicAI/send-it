@@ -9,7 +9,11 @@ export type Call = (
 ) => Promise<Payload>;
 
 export async function scenario(call: Call) {
-  const loaded = await call("demo", { action: "workspace", workspace: "demo" });
+  // The browser reports its timezone first; nothing is listed before that.
+  const unset = await call("demo", { action: "workspace", workspace: "demo" });
+  assert.equal(unset.state.cards.length, 0);
+  const tz = { action: "timezone", timezone: "Pacific/Honolulu" };
+  const loaded = await call("demo", tz);
   assert.equal(loaded.state.cards.length, 3);
   const first = loaded.state.cards[0];
   const subject = "A question & next step — café",
@@ -43,7 +47,8 @@ export async function scenario(call: Call) {
     "today's send extends the streak on a workday, not on a weekend",
   );
   assert.equal(after.todayDone, true);
-  const local = await call("local", { action: "workspace", workspace: "local" });
+  await call("local", { action: "workspace", workspace: "local" });
+  const local = await call("local", tz);
   assert.equal(local.contacts.length, 0);
   const csv =
     'name,email,signal_source,signal_evidence,signal_at\nFictional Import,import@example.test,inbound,"Asked about a booking site",2026-01-01\nMissing Evidence,bad@example.test,inbound,,2026-01-01\n';
@@ -52,9 +57,6 @@ export async function scenario(call: Call) {
   assert.equal(preview.contacts.length, 0);
   const imported = await call("local", { action: "import", csv });
   assert.equal(imported.contacts.length, 1);
+  assert.equal(imported.state.cards.length, 1, "imports fill today's list");
   assert.equal((await call("local", { action: "import", csv })).accepted, 0);
-  assert.equal(
-    (await call("local", { action: "prepare" })).state.cards.length,
-    1,
-  );
 }

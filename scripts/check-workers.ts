@@ -94,6 +94,28 @@ try {
     assert.deepEqual(await rpc(key, "sql", "SELECT count(*) AS n FROM contacts"), [{ n: 1 }]);
   });
 
+  await check("an older touches table migrates inside the Durable Object", async () => {
+    const key = owner("migrate");
+    await rpc(key, "sql", "DROP TABLE touches");
+    await rpc(
+      key,
+      "sql",
+      "CREATE TABLE touches (id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id), day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','dormant')), reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'queued', sent_at TEXT, next_step_snapshot TEXT, next_step_at_snapshot TEXT, outcome TEXT, UNIQUE(contact_id,day), UNIQUE(day,position))",
+    );
+    const after = (await rpc(key, "migrateNow")) as { sql: string };
+    assert.match(after.sql, /event_followup/);
+  });
+
+  await check("beta sign-ups upsert by email", async () => {
+    const key = `signups-${run}`;
+    await rpc(key, "signup", "a@example.test", "Websites", "Past clients");
+    await rpc(key, "signup", "a@example.test", "Websites", "Event list");
+    await rpc(key, "signup", "b@example.test", "", "");
+    const rows = (await rpc(key, "signups")) as { email: string; who: string }[];
+    assert.equal(rows.length, 2);
+    assert.equal(rows.find((r) => r.email === "a@example.test")!.who, "Event list");
+  });
+
   await check("a failed transaction rolls back", async () => {
     assert.deepEqual(await rpc(owner("rollback"), "rollbackProbe"), { n: 0 });
   });
