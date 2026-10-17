@@ -1,23 +1,28 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { cookies } from "next/headers";
-import { getStore, workspace } from "../lib/runtime.ts";
-import { contacts, today } from "../lib/store.ts";
+import { cookies, headers } from "next/headers";
+import { workspace } from "../lib/actions.ts";
+import { storeFor } from "../lib/backend.ts";
+import { isSiteHost } from "../lib/origin.ts";
+import { ownerEmail } from "../lib/owner.ts";
+import instructions from "../prompts/draft.md?raw";
+import Landing from "./landing.tsx";
 import Dashboard from "./ui.tsx";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 export default async function Home() {
+  const requestHeaders = await headers();
+  if (isSiteHost(requestHeaders.get("host"))) return <Landing />;
+  let email: string;
+  try {
+    email = await ownerEmail(requestHeaders);
+  } catch {
+    return <p>Please sign in to use Send It.</p>;
+  }
   const mode = workspace((await cookies()).get("engine-workspace")?.value);
-  const db = getStore(mode);
-  const instructions = readFileSync(
-    join(process.cwd(), "prompts", "draft.md"),
-    "utf8",
-  );
   return (
     <Dashboard
       instructions={instructions}
-      initial={{ state: today(db), contacts: contacts(db), workspace: mode }}
+      // RPC results carry Symbol.dispose, which React can't serialize.
+      initial={JSON.parse(JSON.stringify(await storeFor(mode, email).view(mode)))}
     />
   );
 }

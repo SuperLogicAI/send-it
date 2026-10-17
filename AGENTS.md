@@ -146,6 +146,7 @@ Josh will provide full context in a later session. Until then:
 - **Explain the "why."** Every prioritized person shows a human-readable reason ("You last talked Aug 12 about the booking site; no reply since your quote").
 - **Use small, demo-able increments.** Today is a hackathon, so working end-to-end beats polished halves.
 - **Use opinionated defaults.** Pick a sensible default and note it rather than adding a setting.
+- **Gamification stays gentle and counts-only.** The daily goal is one confirmed follow-up on a workday. No guilt copy when a streak ends. Reward outcomes (replies, bookings) as well as volume. Any sharing is a client-generated image with counts only, never contact details.
 - **Keep prompts in files.** No buried prompt strings in components.
 - **No auto-send code paths.** Not even behind a flag, not even for testing. Use a dry-run mode instead.
 

@@ -33,6 +33,7 @@
 | Name and domain | **Send It** at **sendit.day**. Cloudflare Registrar lists `.day` (Google Registry); confirm at checkout. |
 | Repository | Stays **public and MIT**. The hosted sendit.day site is the official copy of the same code. |
 | Business model | A free tool for building credibility. Freemium only if users ask for more (Phase 4). No billing work in this plan. |
+| Cloudflare account | **contact@superlogicai.com** (holds sendit.day and lookwhaticando.dev). Wrangler must be logged in as that user; put its `account_id` in `wrangler.jsonc`. Start on the Workers Free plan (see Running costs). |
 | Hosting | Cloudflare Workers. The web app runs on **vinext**, Cloudflare's recommended path for Next.js; `vinext check` scored this app 100% compatible. |
 | Data | **One SQLite Durable Object per owner**, inside its own **`send-it-store` Worker** and bound to the app with `script_name`. Sign-in tables (Phase 2) live in D1. |
 | Drafting | **Draft in ChatGPT / Claude** (free, uses the owner's own account) and server-side Claude (capped per owner per day). Both use one prompt builder. |
@@ -62,7 +63,7 @@ Run before handoff, in a scratch copy of the repo, using fictional data only.
 | Browser walkthrough (Chromium, Next 16.4.2 copy) | `BUILD.md` steps 1–6 pass: three cards with reasons, edits survive reload, Copy works, the Gmail compose URL is correctly encoded, the floor doesn't count handoffs, "I sent it" counts once and survives reload, Busy week stops at "You've done your part today," the personal workspace starts empty with its own floor, Prepare today's people works. Recording an outcome also works. At 390px wide there is no horizontal scroll. | Re-run quickly on the real repo after 0.3 |
 | Walkthrough findings | `favicon.ico` 404. Copy was tested only in Chromium with clipboard permission; Safari's gesture rules are untested. "About 10 minutes" shows even for one person. | Fixes in 0.4 and 0.6 |
 | `chatgpt.com/?q=` and `claude.ai/new?q=` | Undocumented. One report says the Claude parameter stopped working; third-party guidance keeps URLs under ~2,000 characters; links may auto-submit. | **Not used.** The button copies the prompt and opens a new chat (0.6) |
-| Cloudflare limits | Workers Free: 10 ms CPU per request, 100k requests a day (official docs). Zero Trust free for 50 users (third-party sources only). | $5/month Workers Paid from Phase 1 |
+| Cloudflare limits | Workers Free: 10 ms CPU per request, 100k requests a day (official docs). Zero Trust free for 50 users (third-party sources only). Whether server-rendered React fits in 10 ms is **unmeasured**; the bundle is about 325 KiB gzipped, under the 3 MB free limit. | Start on Workers Free. Upgrade to Paid ($5/month) when "Error 1102: exceeded resource limits" appears in the logs, or before inviting non-technical beta owners, whichever comes first |
 
 ## Pillar check
 
@@ -90,8 +91,8 @@ Rejected and never built: Gmail send API, auto-send, bought or scraped lists, de
 | Item | Cost |
 | --- | --- |
 | Domain | Cloudflare Registrar charges cost price, with no markup |
-| Workers Paid | $5/month from Phase 1. The free plan's 10 ms CPU limit per request is too tight for server-rendered React |
-| Durable Objects | Included in Paid: 1M requests and 50M rows written per month |
+| Workers Paid | $0 until needed. Upgrade to $5/month when 1102 (CPU limit) errors appear, or before non-technical beta owners are invited. The free plan's 10 ms CPU limit per request may be too tight for server-rendered React; this is unmeasured |
+| Durable Objects | SQLite-backed objects work on Free (100k rows written a day, 5 GB total). Paid includes 1M requests and 50M rows written per month |
 | Cloudflare Access (beta gate) | Free for up to 50 users |
 | Turnstile, Email Routing, Web Analytics | Free |
 | Claude drafts (3 per owner per day) | About $0.04 per owner per month on Haiku 5.5, about $0.72 on Sonnet 5.5. Hard-capped per owner per day |
@@ -159,6 +160,7 @@ Phase 0 stays on Next.js and `node:sqlite`. Cloudflare starts in Phase 1.
 | 1.6 | **Security baseline:** a CSP and security headers via the `next.config.ts` `headers()` function (vinext reads it); the Workers Rate Limiting binding on the API, per owner; keep the existing request size limits; never log contact data or message bodies; secrets only through `wrangler secret put`. | Headers checked with `curl -I`; a log review finds no personal data |
 | 1.7 | **Account controls:** export (CSV in the import format, plus JSON) and delete everything (`deleteAll()` behind a typed confirmation). Plain-language privacy and terms pages (owner reviews): what's stored, that drafts go to Anthropic, no selling of data, retention, how to delete. | Export, delete, and re-import round trip succeeds |
 | 1.8 | **CI:** GitHub Actions runs typecheck, lint, both check scripts, and build, then deploys `main` with a scoped Cloudflare API token stored as a GitHub secret. | Green run on a test PR |
+| 1.9 | **Streaks and badges (v1, in-app only).** Daily streak on workdays (one confirmed follow-up a day), a weekly goal of 5, one banked skip per weekly goal reached (cap 5, a full work week), skips spent automatically on a missed workday, and four badges (first follow-up, 5-day streak, 4 strong weeks, first reply). Everything is replayed from confirmed-send dates, so nothing is stored. The demo workspace seeds a sample streak. | Replay tests cover weekends, skip spending, the cap, a vacation week and the weekly reset; the demo shows a streak; a send extends it |
 
 **1.3 moving storage into the Durable Object.** All patterns below were verified in the spike.
 
@@ -191,6 +193,8 @@ Phase 0 stays on Next.js and `node:sqlite`. Cloudflare starts in Phase 1.
 - **Owner:** set a monthly spend limit in the Anthropic Console, and choose the model after comparing 20 real drafts from Haiku 5.5 and Sonnet 5.5.
 
 **Gate:** 10–20 invited non-technical owners; ≥40% still active in week 4; zero incidents of one owner seeing another's data; Claude cost per owner measured; top 3 friction points written down.
+
+**Streak rules (1.9).** The daily goal is one confirmed follow-up on a workday, not the full queue of three. The tone stays gentle: no guilt copy when a streak ends. Include outcome-based badges (replies, bookings), not only volume. **Sharing is deferred to Phase 2** and must be a client-generated image with counts only, never contact details and never a public profile URL by default. A future setting may let owners choose their own work week.
 
 ---
 
@@ -258,4 +262,4 @@ Nothing moves out of free. No billing code is written before a trigger fires.
 | Clipboard behavior varies by browser | Synchronous copy within the click, a textarea fallback, and an owner test in Safari (0.5) |
 | Using email as the owner key: changing the account email orphans that owner's data | Add an alias migration if this ever happens |
 | Owners can claim a relationship that isn't real (provenance is self-reported) | Send It has no sending ability; mail goes from the owner's own account; per-owner contact caps; terms prohibit bought lists |
-| Dev-only `braces` advisory via `eslint-config-next` | Not shipped to production; recheck when `eslint-config-next` updates |
+| Build-time advisories: `braces` via `eslint-config-next` and vinext's tooling, `fflate` via vinext's `@vercel/og` (10 in `npm audit --omit=dev`, October 2026) | None of that code is in the built Worker (checked by searching `dist/`); recheck when vinext or `eslint-config-next` updates |

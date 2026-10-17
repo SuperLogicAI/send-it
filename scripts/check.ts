@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +8,7 @@ import {
   localDay,
   parseContact,
   rankContacts,
+  shiftDay,
 } from "../lib/rules.ts";
 import {
   addContact,
@@ -16,8 +16,9 @@ import {
   confirmSent,
   contacts,
   ensureDay,
-  openStore,
+  migrate,
   pendingTouch,
+  profile,
   recordOutcome,
   saveDraft,
   seedDemo,
@@ -25,12 +26,25 @@ import {
   snooze,
   today,
 } from "../lib/store.ts";
+import { act } from "../lib/actions.ts";
 import { parseCsv } from "../lib/csv.ts";
+import { openStore as openRaw } from "../lib/node-store.ts";
+import { AuthError, verifyAccess } from "../lib/access.ts";
+import { allowedOrigin, isSiteHost } from "../lib/origin.ts";
+import { scenario } from "./scenario.ts";
 import { buildPrompt, parseReply } from "../lib/prompt.ts";
+import { badges, replayStreak, BANK_CAP } from "../lib/streak.ts";
 
 const now = new Date("2026-10-15T21:00:00.000Z");
+const shiftDayForTest = (day: string, n: number) => shiftDay(day, n);
 const ago = (days: number) =>
   new Date(now.getTime() - days * DAY).toISOString();
+// Most checks assume the browser already reported the owner's timezone.
+function openStore(path?: string) {
+  const db = openRaw(path);
+  db.exec("UPDATE profile SET timezone='Pacific/Honolulu' WHERE timezone=''");
+  return db;
+}
 let passed = 0;
 function check(name: string, fn: () => void) {
   fn();
@@ -203,12 +217,105 @@ check(
   },
 );
 
-check("empty days stay empty when new contacts are imported", () => {
+check("people added later the same day fill open slots", () => {
   const db = openStore();
   assert.equal(today(db, now).cards.length, 0);
   addContact(db, parseContact(base, now));
+  assert.equal(today(db, now).cards.length, 1);
+  addContact(
+    db,
+    parseContact({ ...base, email: "second@example.test" }, now),
+  );
+  assert.equal(today(db, now).cards.length, 2);
+  db.close();
+});
+
+check("no list is saved until the browser reports a timezone", () => {
+  const db = openRaw();
+  addContact(db, parseContact(base, now));
+  assert.equal(profile(db).timezone_unset, true);
   assert.equal(today(db, now).cards.length, 0);
-  assert.equal(today(db, new Date(now.getTime() + DAY)).cards.length, 1);
+  assert.equal(db.prepare("SELECT count(*) AS n FROM daily_runs").get()!.n, 0);
+  act(db, "local", { action: "timezone", timezone: "America/New_York" }, now);
+  assert.equal(profile(db).timezone, "America/New_York");
+  assert.equal(today(db, now).cards.length, 1);
+  act(db, "local", { action: "timezone", timezone: "Europe/London" }, now);
+  assert.equal(profile(db).timezone, "America/New_York", "set only once");
+  assert.throws(() =>
+    act(db, "local", { action: "timezone", timezone: "Mars/Base" }, now),
+  );
+  db.close();
+});
+
+check("event and introduction contacts get their own cards", () => {
+  const db = openStore();
+  const add = (email: string, extra: Record<string, unknown>) =>
+    addContact(
+      db,
+      parseContact(
+        {
+          name: "Example",
+          email,
+          signal_evidence: "A real, recorded connection to this person.",
+          ...extra,
+        },
+        now,
+      ),
+    );
+  add("event@example.test", { signal_source: "event", signal_at: ago(5) });
+  add("old-event@example.test", { signal_source: "event", signal_at: ago(40) });
+  add("fresh-event@example.test", { signal_source: "event", signal_at: ago(1) });
+  add("intro@example.test", { signal_source: "referral", signal_at: ago(200) });
+  add("subscriber@example.test", { signal_source: "opt_in", signal_at: ago(90) });
+  const picked = rankContacts(contacts(db), now, "Pacific/Honolulu").map(
+    (p) => [p.contact.email, p.kind],
+  );
+  assert.deepEqual(picked.sort(), [
+    ["event@example.test", "event_followup"],
+    ["intro@example.test", "introduction"],
+  ]);
+  const cards = today(db, now).cards;
+  assert.equal(cards.length, 2, "the database accepts the new kinds");
+  db.close();
+});
+
+check("older touches tables migrate to the new kinds and keep history", () => {
+  const db = openRaw();
+  db.exec(`DROP TABLE touches;
+    CREATE TABLE touches (id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id),
+      day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL,
+      kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','dormant')),
+      reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sent','skipped')),
+      sent_at TEXT, next_step_snapshot TEXT, next_step_at_snapshot TEXT, outcome TEXT,
+      UNIQUE(contact_id,day), UNIQUE(day,position));
+    UPDATE profile SET timezone='Pacific/Honolulu';`);
+  const id = addContact(db, parseContact(base, now));
+  db.exec("INSERT INTO daily_runs(day) VALUES('2026-10-01')");
+  db.prepare(
+    "INSERT INTO touches(contact_id,day,position,kind,reason,status,sent_at) VALUES(?,'2026-10-01',0,'dormant','Old','sent','2026-10-01T20:00:00.000Z')",
+  ).run(id);
+  migrate(db);
+  assert.equal(profile(db).timezone_unset, true, "unsaved profile re-detects");
+  assert.equal(
+    db.prepare("SELECT reason FROM touches").get()!.reason,
+    "Old",
+  );
+  db.exec("INSERT INTO daily_runs(day) VALUES('2026-10-02')");
+  db.prepare(
+    "INSERT INTO touches(contact_id,day,position,kind,reason) VALUES(?,'2026-10-02',0,'event_followup','New')",
+  ).run(id);
+  db.close();
+});
+
+check("the demo rebuilds itself on a new day with fresh drafts", () => {
+  const db = openStore();
+  const first = act(db, "demo", { action: "workspace" }, now);
+  assert.equal(first.state.cards.length, 3);
+  const later = new Date(now.getTime() + 3 * DAY);
+  const next = act(db, "demo", { action: "workspace" }, later);
+  assert.equal(next.state.cards.length, 3);
+  assert.ok(next.state.cards.every((c) => c.body.trim()));
   db.close();
 });
 
@@ -429,6 +536,57 @@ check("parseReply moves a leading Subject line out of the body", () => {
   });
 });
 
+check("streak: workdays only, weekends neutral, a skip covers a missed day", () => {
+  // 2026-10-12 is a Monday.
+  const mon = "2026-10-12", tue = "2026-10-13", wed = "2026-10-14", thu = "2026-10-15", fri = "2026-10-16", sat = "2026-10-17", sun = "2026-10-18", nextMon = "2026-10-19";
+  assert.deepEqual(replayStreak([], thu).streak, 0);
+  assert.equal(replayStreak([mon, tue, wed], wed).streak, 3);
+  // Today still open: an unfinished today doesn't break the streak.
+  const open = replayStreak([mon, tue, wed], thu);
+  assert.equal(open.streak, 3);
+  assert.equal(open.todayDone, false);
+  // A missed workday with no skip breaks it; the next send starts again.
+  assert.equal(replayStreak([mon, tue, thu], thu).streak, 1);
+  assert.equal(replayStreak([mon, tue, thu], thu).best, 2);
+  // Weekends neither extend nor break the streak.
+  assert.equal(replayStreak([thu, fri], sun).streak, 2);
+  assert.equal(replayStreak([thu, fri, sat], nextMon).streak, 2);
+  assert.equal(replayStreak([thu, fri, sun], nextMon).streak, 2);
+  assert.equal(replayStreak([fri, nextMon], nextMon).streak, 2);
+  assert.equal(replayStreak([fri], nextMon).workdayToday, true);
+  assert.equal(replayStreak([fri], sun).workdayToday, false);
+  // Five sends in a Mon-Sun week bank one skip, and a missed day spends it.
+  const week = [mon, mon, tue, wed, thu]; // 5 sends, Fri missed
+  const banked = replayStreak(week, thu);
+  assert.equal(banked.bank, 1);
+  assert.equal(banked.weekCount, 5);
+  assert.equal(banked.weeksHit, 1);
+  const covered = replayStreak(week, nextMon);
+  assert.equal(covered.bank, 0, "Friday spent the skip");
+  assert.equal(covered.streak, 4, "the streak held through Friday");
+  // The bank caps at a full work week.
+  const many: string[] = [];
+  for (let w = 0; w < 8; w++)
+    for (let i = 0; i < 5; i++) many.push(shiftDayForTest(mon, w * 7 + i));
+  assert.equal(replayStreak(many, shiftDayForTest(mon, 7 * 7 + 4)).bank, BANK_CAP);
+  // A vacation week is covered by a full bank. Mid-week, today is still open.
+  assert.equal(replayStreak(many, shiftDayForTest(mon, 8 * 7 + 4)).bank, 1);
+  const back = replayStreak(many, shiftDayForTest(mon, 9 * 7));
+  assert.equal(back.bank, 0, "five skips covered five missed workdays");
+  assert.equal(back.streak, 40, "the streak held through the whole week");
+  // One more missed workday with an empty bank breaks it.
+  assert.equal(replayStreak(many, shiftDayForTest(mon, 9 * 7 + 1)).streak, 0);
+  // Calendar week count resets on Monday.
+  assert.equal(replayStreak([thu, fri], nextMon).weekCount, 0);
+  // Badges are derived, including best-ever streaks.
+  const got = badges(replayStreak([mon, tue, wed, thu, fri], fri), 5, 1);
+  assert.deepEqual(
+    got.filter((b) => b.earned).map((b) => b.id),
+    ["first_send", "streak_5", "first_reply"],
+  );
+  assert.ok(badges(replayStreak([], thu), 0, 0).every((b) => !b.earned));
+});
+
 check("CSV handles quoted commas, escaped quotes and multiline notes", () => {
   const [row] = parseCsv(
     'name,email,signal_evidence\r\n"Alex, Jr.",alex@example.test,"We discussed ""booking""\non a call."\r\n',
@@ -440,124 +598,81 @@ check("CSV handles quoted commas, escaped quotes and multiline notes", () => {
   assert.throws(() => parseCsv("name,email\nAlex,test@example.test,extra"));
 });
 
-if (process.argv.includes("--built-route")) {
-  // Match the normal Next server bootstrap without opening a listening port.
-  Object.assign(globalThis, { AsyncLocalStorage });
-  const { NextRequest } = await import("next/server.js");
-  const routeUrl = new URL(
-    "../.next/server/app/api/engine/route.js",
-    import.meta.url,
-  ).href;
-  const built = (await import(routeUrl)) as {
-    default: {
-      routeModule: {
-        userland: { POST: (request: Request) => Promise<Response> };
-      };
-    };
+check("origin guard: production accepts only the app origin, development also localhost", () => {
+  assert.ok(allowedOrigin("https://app.sendit.day", "app.sendit.day"));
+  assert.ok(allowedOrigin("https://app.sendit.day", "anything", true));
+  assert.ok(!allowedOrigin("https://sendit.day", "sendit.day"), "landing host can't post");
+  assert.ok(!allowedOrigin("http://localhost:3000", "localhost:3000"));
+  assert.ok(!allowedOrigin("https://app.sendit.day.evil.test", "app.sendit.day"));
+  assert.ok(!allowedOrigin("https://app.sendit.dev", "app.sendit.day"));
+  assert.ok(!allowedOrigin(null, "app.sendit.day"));
+  assert.ok(allowedOrigin("http://localhost:3000", "localhost:3000", true));
+  assert.ok(allowedOrigin("http://127.0.0.1:3000", "127.0.0.1:3000", true));
+  assert.ok(!allowedOrigin("https://example.test", "localhost:3000", true));
+  assert.ok(!allowedOrigin("http://localhost:3001", "localhost:3000", true));
+  assert.ok(!allowedOrigin("malformed", "localhost:3000", true));
+});
+
+check("only the bare domain serves the public landing page", () => {
+  assert.ok(isSiteHost("sendit.day"));
+  assert.ok(isSiteHost("www.sendit.day"));
+  assert.ok(!isSiteHost("app.sendit.day"));
+  assert.ok(!isSiteHost("sendit.day.evil.test"));
+  assert.ok(!isSiteHost("localhost:3000"));
+  assert.ok(!isSiteHost(null));
+});
+
+{
+  const rsa = { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" };
+  const pair = await crypto.subtle.generateKey(rsa, true, ["sign", "verify"]);
+  const attacker = await crypto.subtle.generateKey(rsa, true, ["sign", "verify"]);
+  const jwk = { ...(await crypto.subtle.exportKey("jwk", pair.publicKey)), kid: "k1" };
+  const b64u = (v: string | ArrayBuffer) => Buffer.from(v as string).toString("base64url");
+  const sign = async (claims: object, opts: { kid?: string; alg?: string; key?: CryptoKey } = {}) => {
+    const h = b64u(JSON.stringify({ alg: opts.alg ?? "RS256", kid: opts.kid ?? "k1" })),
+      p = b64u(JSON.stringify(claims));
+    const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", opts.key ?? pair.privateKey, new TextEncoder().encode(`${h}.${p}`));
+    return `${h}.${p}.${b64u(sig)}`;
   };
-  const handler = built.default.routeModule.userland.POST;
-  const oldCwd = process.cwd(),
-    dir = mkdtempSync(join(tmpdir(), "engine-route-check-"));
-  const invoke = async (
-    body: Record<string, unknown>,
-    mode = "demo",
-    origin = "http://127.0.0.1:3000",
-  ) => {
-    const response = await handler(
-      new NextRequest("http://127.0.0.1:3000/api/engine", {
-        method: "POST",
-        headers: {
-          origin,
-          host: "127.0.0.1:3000",
-          "content-type": "application/json",
-          cookie: `engine-workspace=${mode}`,
-        },
-        body: JSON.stringify(body),
-      }),
-    );
-    return { status: response.status, data: await response.json() };
-  };
-  try {
-    process.chdir(dir);
-    assert.equal(
-      (
-        await invoke(
-          { action: "busy", enabled: true },
-          "demo",
-          "https://example.test",
-        )
-      ).status,
-      403,
-    );
-    assert.equal(
-      (await invoke({ action: "busy", enabled: true }, "demo", "malformed"))
-        .status,
-      403,
-    );
-    const loaded = await invoke({ action: "workspace", workspace: "demo" });
-    assert.equal(loaded.status, 200);
-    assert.equal(loaded.data.state.cards.length, 3);
-    const first = loaded.data.state.cards[0];
-    const subject = "A question & next step — café",
-      body = "Hi Jordan,\n\nA note with commas, ampersands & real context.";
-    const handed = await invoke({
-      action: "handoff",
-      id: first.id,
-      subject,
-      body,
-    });
-    assert.equal(handed.status, 200);
-    assert.equal(handed.data.state.weeklyCount, 0);
-    const compose = new URL(handed.data.url);
-    assert.equal(compose.hostname, "mail.google.com");
-    assert.equal(compose.searchParams.get("su"), subject);
-    assert.equal(compose.searchParams.get("body"), body);
-    assert.equal(
-      (await invoke({ action: "sent", id: first.id, subject, body })).data.state
-        .weeklyCount,
-      1,
-    );
-    assert.equal(
-      (await invoke({ action: "sent", id: first.id, subject, body })).data.state
-        .weeklyCount,
-      1,
-    );
-    const local = await invoke({ action: "workspace", workspace: "local" });
-    assert.equal(local.data.contacts.length, 0);
-    const csv =
-      'name,email,signal_source,signal_evidence,signal_at\nFictional Import,import@example.test,inbound,"Asked about a booking site",2026-01-01\nMissing Evidence,bad@example.test,inbound,,2026-01-01\n';
-    const preview = await invoke({ action: "preview", csv }, "local");
-    assert.equal(preview.data.accepted, 1);
-    assert.equal(preview.data.contacts.length, 0);
-    const imported = await invoke({ action: "import", csv }, "local");
-    assert.equal(imported.data.contacts.length, 1);
-    assert.equal(
-      (await invoke({ action: "import", csv }, "local")).data.accepted,
-      0,
-    );
-    assert.equal(
-      (await invoke({ action: "prepare" }, "local")).data.state.cards.length,
-      1,
-    );
-    passed++;
-    console.log(
-      "✓ compiled Next route: origin checks, SQLite, Gmail encoding, confirmation, separate workspaces and CSV import",
-    );
-  } finally {
-    const shared = globalThis as typeof globalThis & {
-      engineStores?: Map<string, ReturnType<typeof openStore>>;
-    };
-    for (const [path, db] of shared.engineStores ?? []) {
-      if (path.startsWith(dir)) {
-        db.close();
-        shared.engineStores!.delete(path);
-      }
-    }
-    process.chdir(oldCwd);
-    rmSync(dir, { recursive: true, force: true });
+  const cfg = { team: "team-x", aud: "aud-1" };
+  const sec = Date.now() / 1000;
+  const good = { iss: "https://team-x.cloudflareaccess.com", aud: ["aud-1"], exp: sec + 600, nbf: sec - 10, email: " Owner@Example.TEST " };
+  const keys = async () => [jwk];
+  const rejects = (token: string, config = cfg) =>
+    assert.rejects(verifyAccess(token, config, keys), AuthError);
+
+  assert.equal(await verifyAccess(await sign(good), cfg, keys), "owner@example.test");
+  assert.equal(await verifyAccess(await sign({ ...good, aud: "aud-1" }), cfg, keys), "owner@example.test");
+  await rejects("", cfg);
+  await rejects("a.b");
+  await rejects(await sign(good, { key: attacker.privateKey }));
+  {
+    // Swap in another owner's email but keep the original signature.
+    const [h, , sig] = (await sign(good)).split(".");
+    await rejects(`${h}.${b64u(JSON.stringify({ ...good, email: "victim@example.test" }))}.${sig}`);
   }
+  await rejects(await sign(good, { kid: "unknown" }));
+  await rejects(await sign(good, { alg: "HS256" }));
+  await rejects(await sign(good, { alg: "none" }));
+  await rejects(await sign({ ...good, aud: ["other"] }));
+  await rejects(await sign({ ...good, iss: "https://evil.cloudflareaccess.com" }));
+  await rejects(await sign({ ...good, exp: sec - 1 }));
+  await rejects(await sign({ ...good, nbf: sec + 3600 }));
+  await rejects(await sign({ ...good, email: undefined }));
+  await rejects(await sign({ ...good, exp: undefined }));
+  await rejects(await sign(good), { team: "team-x", aud: "" });
+  await rejects(await sign(good), { team: "", aud: "aud-1" });
+  passed++;
+  console.log("✓ Access JWT: accepts a valid token; rejects forged, expired, wrong audience/issuer, bad algorithm, unknown key, unconfigured");
 }
 
-console.log(
-  `\n${passed} checks passed. No real contacts or email services were used.`,
-);
+{
+  const stores = { demo: openRaw(), local: openRaw() };
+  await scenario(async (mode, input) => act(stores[mode], mode, input));
+  passed++;
+  console.log(
+    "✓ owner journey on Node SQLite: Gmail encoding, confirmation, separate workspaces, CSV import",
+  );
+}
+
+console.log(`\n${passed} checks passed. No real contacts or email services were used.`);

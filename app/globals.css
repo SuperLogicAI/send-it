@@ -1,3 +1,10 @@
+/* Self-hosted so every platform sees the same brand, with no third-party request. */
+@font-face {
+  font-family: "Figtree";
+  src: url("/fonts/figtree.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
 :root {
   --paper: #f5f6f0;
   --ink: #173e32;
@@ -5,8 +12,8 @@
   --green: #126344;
   --lime: #d1f568;
   --accent: #c65324;
-  --font-body: "Avenir Next", Avenir, "Segoe UI", sans-serif;
-  --font-display: "Avenir Next", Avenir, "Trebuchet MS", sans-serif;
+  --font-body: "Figtree", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+  --font-display: "Figtree", "Avenir Next", Avenir, "Segoe UI", sans-serif;
   --line: #d7dfd2;
   --white: #fffefb;
   --radius: 18px;
@@ -164,6 +171,9 @@ small {
   display: flex;
   align-items: center;
   gap: 7px;
+}
+.local-status a {
+  color: inherit;
 }
 .local-status > span {
   width: 6px;
@@ -950,9 +960,25 @@ footer {
   font-size: 10px;
   color: #64715c;
 }
-footer > span:first-child {
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   letter-spacing: 1.4px;
   font-size: 8px;
+  color: inherit;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.brand-link img {
+  display: block;
+  height: 14px;
+  width: auto;
+}
+.brand-link:hover img,
+.brand-link:focus-visible img {
+  opacity: 0.75;
 }
 @media (min-width: 1450px) {
   main {
@@ -1183,4 +1209,306 @@ footer > span:first-child {
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Public landing page (bare domain) */
+.site-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px max(16px, calc((100vw - 1100px) / 2));
+  border-bottom: 1px solid var(--line);
+}
+.site-bar nav {
+  display: flex;
+  gap: 22px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.site-bar nav a {
+  text-decoration: none;
+}
+.site-bar nav a:hover {
+  text-decoration: underline;
+}
+.site-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 16px 24px;
+}
+.site-hero {
+  padding: 64px 0 8px;
+}
+.site-hero h1 {
+  max-width: 15em;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(32px, 5.4vw, 58px);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.site-lead {
+  max-width: 40em;
+  margin: 22px 0 0;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.site-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 28px;
+}
+.site-cta small {
+  color: var(--muted);
+}
+.site .primary {
+  padding: 14px 22px;
+  font-size: 14px;
+  text-decoration: none;
+}
+.site-shot {
+  margin: 40px 0 0;
+}
+.site-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 50px rgba(23, 62, 50, 0.12);
+}
+.site-shot figcaption {
+  margin-top: 10px;
+  font-size: 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.site-main h2 {
+  margin: 64px 0 20px;
+  font-family: var(--font-display);
+  font-size: 28px;
+  letter-spacing: -0.01em;
+}
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.site-grid li {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+.site-grid h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.site-grid p {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.site-num {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-bottom: 10px;
+  border-radius: 50%;
+  background: var(--lime);
+  font-weight: 700;
+}
+.site-open p {
+  max-width: 44em;
+  margin: 0;
+  font-size: 16px;
+  color: var(--muted);
+}
+.site-final {
+  margin-top: 64px;
+  padding: 40px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+  text-align: center;
+}
+.site-final h2 {
+  margin: 0 0 10px;
+}
+.site-final p {
+  max-width: 32em;
+  margin: 0 auto 22px;
+  color: var(--muted);
+}
+.site footer {
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+.site footer a {
+  color: inherit;
+}
+.site-faq {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+.site-faq div {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--white);
+}
+.site-faq dt {
+  margin-bottom: 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.site-faq dd {
+  margin: 0;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+.site-form {
+  display: grid;
+  gap: 14px;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: left;
+}
+.site-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.site-form input {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  font-size: 16px;
+}
+.site-form .primary {
+  justify-self: start;
+}
+/* Off-screen, not display:none, so simple bots still fill it in. */
+.site-trap {
+  position: absolute;
+  left: -10000px;
+}
+/* The sign-up form posts without JavaScript and answers with #thanks or
+   #signup-error; only the matching message shows. */
+.site-done {
+  display: none;
+  font-weight: 700;
+  color: var(--green) !important;
+}
+.site-done.error {
+  color: var(--accent) !important;
+}
+.site-done:target {
+  display: block;
+}
+#join {
+  scroll-margin-top: 24px;
+}
+@media (max-width: 600px) {
+  .site-hero {
+    padding-top: 40px;
+  }
+  .site-lead {
+    font-size: 16px;
+  }
+  .site-main h2 {
+    margin-top: 48px;
+    font-size: 24px;
+  }
+}
+
+/* Streak bank and badges */
+.bank {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.pips {
+  display: flex;
+  gap: 5px;
+}
+.pips i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid #ffffff55;
+}
+.pips i.on {
+  background: var(--lime);
+  border-color: var(--lime);
+}
+.badges {
+  padding: 22px;
+  margin-top: 17px;
+}
+.badges h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.badges ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.badges li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.badges li.earned {
+  color: var(--ink);
+}
+.badges small {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.badge-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--line);
+  font-size: 12px;
+}
+.badges li.earned .badge-mark {
+  border: 0;
+  background: var(--lime);
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }

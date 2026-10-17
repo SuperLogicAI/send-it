@@ -26,7 +26,13 @@ export type Contact = {
   do_not_contact: number;
 };
 export type ContactInput = Omit<Contact, "id">;
-export type Kind = "inbound" | "next_step_due" | "quote_followup" | "dormant";
+export type Kind =
+  | "inbound"
+  | "next_step_due"
+  | "quote_followup"
+  | "event_followup"
+  | "introduction"
+  | "dormant";
 export type Pick = {
   kind: Kind;
   reason: string;
@@ -207,6 +213,32 @@ export function pickReason(
         reason: `Quote sent ${dateLabel(c.quote_sent_at)}. No later follow-up recorded since ${dateLabel(latest)}.`,
       };
   }
+  // Event and introduction contacts often have no two-way date yet, so the
+  // familiar-face rule below never reaches them. Give each its own window.
+  const age = now.getTime() - Date.parse(c.signal_at);
+  if (
+    c.signal_source === "event" &&
+    !c.last_outbound_at &&
+    age >= 3 * DAY &&
+    age <= 21 * DAY
+  )
+    return {
+      kind: "event_followup",
+      priority: 2,
+      since: c.signal_at,
+      reason: `You connected through an event on ${dateLabel(c.signal_at)}. No follow-up recorded yet.`,
+    };
+  if (
+    c.signal_source === "referral" &&
+    !c.last_outbound_at &&
+    !c.last_two_way_at
+  )
+    return {
+      kind: "introduction",
+      priority: 2,
+      since: c.signal_at,
+      reason: `You were introduced on ${dateLabel(c.signal_at)}. No follow-up recorded yet.`,
+    };
   const latest = [
     c.signal_at,
     c.last_two_way_at,

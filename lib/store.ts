@@ -1,6 +1,3 @@
-import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import {
   emailValid,
   isDay,
@@ -14,6 +11,8 @@ import {
   type ContactInput,
   type Kind,
 } from "./rules.ts";
+import { badges, isWorkday, replayStreak } from "./streak.ts";
+import { TOUCHES } from "./schema.ts";
 
 export type Profile = {
   owner_email: string;
@@ -23,6 +22,8 @@ export type Profile = {
   voice_sample: string;
   never_say: string;
   timezone: string;
+  // True until the browser reports the owner's timezone (see setTimezone).
+  timezone_unset: boolean;
   busy_week: number;
   demo: number;
 };
@@ -43,62 +44,28 @@ export type Touch = {
   contact: Contact;
 };
 
-export function openStore(path = ":memory:") {
-  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
-  const db = new DatabaseSync(path, {
-    enableForeignKeyConstraints: true,
-    timeout: 5000,
-  });
-  db.exec(`
-    PRAGMA journal_mode=WAL;
-    CREATE TABLE IF NOT EXISTS profile (
-      id INTEGER PRIMARY KEY CHECK(id=1), owner_email TEXT NOT NULL DEFAULT '',
-      what_you_do TEXT NOT NULL DEFAULT '', best_clients TEXT NOT NULL DEFAULT '', result_they_want TEXT NOT NULL DEFAULT '',
-      voice_sample TEXT NOT NULL DEFAULT '', never_say TEXT NOT NULL DEFAULT '', timezone TEXT NOT NULL DEFAULT 'Pacific/Honolulu',
-      busy_week INTEGER NOT NULL DEFAULT 0 CHECK(busy_week IN (0,1)), demo INTEGER NOT NULL DEFAULT 0 CHECK(demo IN (0,1))
-    );
-    INSERT OR IGNORE INTO profile(id) VALUES(1);
-    CREATE TABLE IF NOT EXISTS contacts (
-      id INTEGER PRIMARY KEY, name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 120),
-      email TEXT NOT NULL UNIQUE CHECK(email LIKE '%_@_%._%' AND email=lower(trim(email))),
-      signal_source TEXT NOT NULL CHECK(signal_source IN ('two_way','inbound','event','referral','client','opt_in')),
-      signal_evidence TEXT NOT NULL CHECK(length(trim(signal_evidence)) BETWEEN 10 AND 4000),
-      signal_at TEXT NOT NULL CHECK(strftime('%Y-%m-%dT%H:%M:%fZ',signal_at) IS signal_at),
-      last_two_way_at TEXT CHECK(last_two_way_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',last_two_way_at) IS last_two_way_at),
-      last_inbound_at TEXT CHECK(last_inbound_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',last_inbound_at) IS last_inbound_at),
-      last_outbound_at TEXT CHECK(last_outbound_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',last_outbound_at) IS last_outbound_at),
-      quote_sent_at TEXT CHECK(quote_sent_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',quote_sent_at) IS quote_sent_at),
-      stage TEXT NOT NULL DEFAULT 'warm' CHECK(stage IN ('warm','talking','quote','client','lost')),
-      next_step TEXT CHECK(next_step IS NULL OR length(trim(next_step))>0),
-      next_step_at TEXT CHECK(next_step_at IS NULL OR date(next_step_at) IS next_step_at),
-      not_now_until TEXT CHECK(not_now_until IS NULL OR date(not_now_until) IS not_now_until),
-      do_not_contact INTEGER NOT NULL DEFAULT 0 CHECK(do_not_contact IN (0,1)),
-      CHECK(signal_source!='two_way' OR last_two_way_at IS NOT NULL),
-      CHECK((next_step IS NULL)=(next_step_at IS NULL))
-    );
-    CREATE TABLE IF NOT EXISTS daily_runs (day TEXT PRIMARY KEY CHECK(date(day) IS day));
-    CREATE TABLE IF NOT EXISTS touches (
-      id INTEGER PRIMARY KEY, contact_id INTEGER NOT NULL REFERENCES contacts(id),
-      day TEXT NOT NULL REFERENCES daily_runs(day), position INTEGER NOT NULL,
-      kind TEXT NOT NULL CHECK(kind IN ('inbound','next_step_due','quote_followup','dormant')),
-      reason TEXT NOT NULL, subject TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sent','skipped')),
-      sent_at TEXT CHECK(sent_at IS NULL OR strftime('%Y-%m-%dT%H:%M:%fZ',sent_at) IS sent_at),
-      next_step_snapshot TEXT, next_step_at_snapshot TEXT,
-      outcome TEXT CHECK(outcome IS NULL OR outcome IN ('replied','booked','no_response','not_now')),
-      UNIQUE(contact_id,day), UNIQUE(day,position),
-      CHECK((status='sent')=(sent_at IS NOT NULL))
-    );
-  `);
-  return db;
-}
-
-export type Store = ReturnType<typeof openStore>;
+// What the data functions need from SQLite. node:sqlite (tests) and the
+// Durable Object (production) both satisfy it; `transaction` is optional
+// because node:sqlite has none and uses BEGIN IMMEDIATE instead.
+type Row = Record<string, unknown>;
+export type Store = {
+  prepare(q: string): {
+    run(...a: unknown[]): unknown;
+    get(...a: unknown[]): Row | undefined;
+    all(...a: unknown[]): Row[];
+  };
+  exec(q: string): unknown;
+  transaction?<T>(fn: () => T): T;
+};
 export function profile(db: Store): Profile {
   // node:sqlite returns null-prototype rows. Copy them into plain objects
   // before they reach React's Server Component serialization boundary.
-  const row = db.prepare("SELECT * FROM profile WHERE id=1").get();
-  return { ...row } as unknown as Profile;
+  const row = db.prepare("SELECT * FROM profile WHERE id=1").get()!;
+  return {
+    ...row,
+    timezone: row.timezone || "UTC",
+    timezone_unset: !row.timezone,
+  } as unknown as Profile;
 }
 export function contacts(db: Store): Contact[] {
   return db
@@ -129,13 +96,14 @@ export function addContact(db: Store, input: ContactInput): number {
     throw new Error("Invalid contact fields.");
   const row = db
     .prepare(
-      `INSERT INTO contacts(${keys.join(",")}) VALUES(${keys.map(() => "?").join(",")})`,
+      `INSERT INTO contacts(${keys.join(",")}) VALUES(${keys.map(() => "?").join(",")}) RETURNING id`,
     )
-    .run(...keys.map((k) => input[k]));
-  return Number(row.lastInsertRowid);
+    .get(...keys.map((k) => input[k]));
+  return Number(row!.id);
 }
 
-function transaction<T>(db: Store, fn: () => T): T {
+export function transaction<T>(db: Store, fn: () => T): T {
+  if (db.transaction) return db.transaction(fn);
   db.exec("BEGIN IMMEDIATE");
   try {
     const value = fn();
@@ -147,23 +115,61 @@ function transaction<T>(db: Store, fn: () => T): T {
   }
 }
 
+// Runs once per store open. SQLite can't alter a CHECK, so an older touches
+// table is rebuilt with the current kinds. Profiles that were never saved
+// lose the old Honolulu default, so the browser's timezone is used instead.
+export function migrate(db: Store) {
+  const table = db
+    .prepare("SELECT sql FROM sqlite_master WHERE name='touches'")
+    .get();
+  if (String(table?.sql).includes("event_followup")) return;
+  transaction(db, () => {
+    db.exec(`CREATE TABLE touches_next (${TOUCHES});
+      INSERT INTO touches_next SELECT * FROM touches;
+      DROP TABLE touches;
+      ALTER TABLE touches_next RENAME TO touches;
+      UPDATE profile SET timezone='' WHERE timezone='Pacific/Honolulu' AND owner_email='' AND what_you_do='';`);
+  });
+}
+
+export function setTimezone(db: Store, timezone: string) {
+  try {
+    localDay(new Date(), timezone);
+  } catch {
+    throw new Error("Choose a valid timezone, such as Pacific/Honolulu.");
+  }
+  db.prepare("UPDATE profile SET timezone=? WHERE id=1 AND timezone=''").run(
+    timezone,
+  );
+}
+
 export function ensureDay(db: Store, now = new Date()): string {
   const prefs = profile(db),
     day = localDay(now, prefs.timezone);
+  // No list until the browser reports the timezone, so a first visit can't
+  // save one under the wrong date.
+  if (prefs.timezone_unset) return day;
   return transaction(db, () => {
-    if (db.prepare("SELECT day FROM daily_runs WHERE day=?").get(day))
-      return day;
-    db.prepare("INSERT INTO daily_runs(day) VALUES(?)").run(day);
+    db.prepare("INSERT OR IGNORE INTO daily_runs(day) VALUES(?)").run(day);
+    // Fill open slots up to three, the same day. Sent, skipped and
+    // suppressed cards keep their slot, so nobody is swapped in for them.
+    const taken = db
+      .prepare("SELECT contact_id,position FROM touches WHERE day=?")
+      .all(day);
+    if (taken.length >= 3) return day;
+    const ids = new Set(taken.map((t) => Number(t.contact_id)));
+    let position = Math.max(-1, ...taken.map((t) => Number(t.position))) + 1;
     rankContacts(contacts(db), now, prefs.timezone)
-      .slice(0, 3)
-      .forEach((pick, index) => {
+      .filter((pick) => !ids.has(pick.contact.id))
+      .slice(0, 3 - taken.length)
+      .forEach((pick) => {
         const c = pick.contact;
         db.prepare(
           `INSERT INTO touches(contact_id,day,position,kind,reason,next_step_snapshot,next_step_at_snapshot) VALUES(?,?,?,?,?,?,?)`,
         ).run(
           c.id,
           day,
-          index,
+          position++,
           pick.kind,
           pick.reason,
           c.next_step,
@@ -195,14 +201,22 @@ export function today(db: Store, now = new Date()) {
     .filter((t) => t.status === "queued")
     .slice(0, Math.max(0, target - handled))
     .filter((t) => pickReason(t.contact, now, prefs.timezone));
-  const count = (
+  const sentDays = (
     db.prepare("SELECT sent_at FROM touches WHERE status='sent'").all() as {
       sent_at: string;
     }[]
-  ).filter((t) => {
-    const sentDay = localDay(new Date(t.sent_at), prefs.timezone);
-    return sentDay >= shiftDay(day, -6) && sentDay <= day;
-  }).length;
+  ).map((t) => localDay(new Date(t.sent_at), prefs.timezone));
+  const count = sentDays.filter(
+    (d) => d >= shiftDay(day, -6) && d <= day,
+  ).length;
+  const replies = Number(
+    db
+      .prepare(
+        "SELECT count(*) AS n FROM touches WHERE outcome IN ('replied','booked')",
+      )
+      .get()!.n,
+  );
+  const streak = replayStreak(sentDays, day);
   return {
     profile: prefs,
     day,
@@ -211,6 +225,8 @@ export function today(db: Store, now = new Date()) {
     cards: pending,
     history: all.filter((t) => t.status === "sent"),
     weeklyCount: count,
+    streak,
+    badges: badges(streak, sentDays.length, replies),
     totalContacts: contacts(db).length,
   };
 }
@@ -304,7 +320,7 @@ export function saveProfile(db: Store, raw: Record<string, unknown>) {
   const email = text("owner_email").toLowerCase();
   if (email && !emailValid(email))
     throw new Error("Add a valid sending email address.");
-  const timezone = text("timezone") || "Pacific/Honolulu";
+  const timezone = text("timezone") || "UTC";
   try {
     localDay(new Date(), timezone);
   } catch {
@@ -364,6 +380,24 @@ export function recordOutcome(
         "UPDATE contacts SET next_step=?,next_step_at=? WHERE id=?",
       ).run(nextStep.trim(), nextDay, t.contact_id);
   });
+}
+
+// The demo is fictional, so it is rebuilt each day: sample drafts and
+// dates only make sense on the day they were written.
+export function resetStaleDemo(db: Store, now = new Date()) {
+  const prefs = profile(db);
+  if (!prefs.demo) return;
+  if (
+    db
+      .prepare("SELECT 1 FROM daily_runs WHERE day=?")
+      .get(localDay(now, prefs.timezone))
+  )
+    return;
+  transaction(db, () =>
+    db.exec(
+      "DELETE FROM touches; DELETE FROM daily_runs; DELETE FROM contacts;",
+    ),
+  );
 }
 
 export function seedDemo(db: Store, now = new Date()) {
@@ -440,4 +474,27 @@ export function seedDemo(db: Store, now = new Date()) {
         touch.id,
       );
   }
+}
+
+// Sample confirmed sends on the last few workdays, so the fictional demo shows
+// a streak. Runs once per demo workspace; safe to call on every view.
+export function seedDemoHistory(db: Store, now = new Date()) {
+  if (db.prepare("SELECT 1 FROM touches WHERE reason='Sample history'").get())
+    return;
+  const prefs = profile(db);
+  const ids = ["taylor@example.test", "sam@example.test"].map(
+    (email) =>
+      db.prepare("SELECT id FROM contacts WHERE email=?").get(email)?.id,
+  );
+  if (ids.some((id) => id === undefined)) return;
+  let day = localDay(now, prefs.timezone);
+  [2, 2, 1, 1].forEach((sends) => {
+    do day = shiftDay(day, -1);
+    while (!isWorkday(day));
+    db.prepare("INSERT OR IGNORE INTO daily_runs(day) VALUES(?)").run(day);
+    for (let position = 0; position < sends; position++)
+      db.prepare(
+        "INSERT OR IGNORE INTO touches(contact_id,day,position,kind,reason,subject,body,status,sent_at) VALUES(?,?,?,'dormant','Sample history','Checking in','Sample message.','sent',?)",
+      ).run(ids[position], day, position, `${day}T20:00:00.000Z`);
+  });
 }
